@@ -1,0 +1,14 @@
+--- a/src/log.cpp
++++ b/src/log.cpp
+@@ -121,10 +121,6 @@
+   logEntries[pos].loglevel=level;
+   logEntries[pos].ready=true;
+
+-  // write to log file
+-  if (logFileAvail) {
+-    appendLogBuf(logEntries[pos]);
+-    logFileNotify.notify_one();
+-  }
++  // log file writing disabled for plugin use
+
+   if (logLevel<level) return 0;

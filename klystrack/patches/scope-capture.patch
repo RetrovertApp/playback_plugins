@@ -1,0 +1,129 @@
+--- a/src/lib/ksnd.c
++++ b/src/lib/ksnd.c
+@@ -271,3 +271,18 @@ KLYSAPI int KSND_GetPlayTime(KSong *song, int position)
+ {
+ 	return mus_get_playtime_at(&song->song, position);
+ }
++
++
++KLYSAPI void KSND_EnableScopeCapture(KPlayer *player, int enable)
++{
++	if (player)
++		cyd_enable_scope_capture(&player->cyd, enable);
++}
++
++
++KLYSAPI unsigned int KSND_GetScopeData(KPlayer *player, int channel, float *buffer, unsigned int num_samples)
++{
++	if (!player)
++		return 0;
++	return cyd_get_scope_data(&player->cyd, channel, buffer, num_samples);
++}
+--- a/src/lib/ksnd.h
++++ b/src/lib/ksnd.h
+@@ -218,6 +218,9 @@ KLYSAPI extern int KSND_GetPlayPosition(KPlayer* player);
+  */
+ KLYSAPI extern void KSND_GetVUMeters(KPlayer *player, int *envelope, int n_channels);
+
++KLYSAPI extern void KSND_EnableScopeCapture(KPlayer *player, int enable);
++KLYSAPI extern unsigned int KSND_GetScopeData(KPlayer *player, int channel, float *buffer, unsigned int num_samples);
++
+ #ifdef __cplusplus
+ }
+ #endif
+--- a/src/snd/cyd.c
++++ b/src/snd/cyd.c
+@@ -640,6 +640,14 @@ static Sint32 cyd_output(CydEngine *cyd)
+ 			}
+ #endif
+
++			/* Capture per-channel scope data after envelope/filter, before panning */
++			if (cyd->scope_enabled)
++			{
++				cyd->scope_buffer[i][cyd->scope_write_pos[i] & CYD_SCOPE_BUFFER_MASK] =
++					(float)o / 32768.0f;
++				cyd->scope_write_pos[i]++;
++			}
++
+ #ifdef STEREOOUTPUT
+ 			Sint32 ol = o * chn->gain_left / CYD_STEREO_GAIN, or = o * chn->gain_right / CYD_STEREO_GAIN;
+ #endif
+@@ -1464,3 +1472,45 @@ void cyd_pause(CydEngine *cyd, Uint8 enable)
+ 	cyd_lock(cyd, 0);
+ #endif
+ }
++
++
++void cyd_enable_scope_capture(CydEngine *cyd, int enable)
++{
++	if (!cyd)
++		return;
++
++	cyd->scope_enabled = enable;
++
++	if (enable)
++	{
++		memset(cyd->scope_buffer, 0, sizeof(cyd->scope_buffer));
++		memset(cyd->scope_write_pos, 0, sizeof(cyd->scope_write_pos));
++	}
++}
++
++
++Uint32 cyd_get_scope_data(CydEngine *cyd, int channel, float *buffer, Uint32 num_samples)
++{
++	Uint32 read_pos;
++	Uint32 i;
++
++	if (!cyd || !buffer || !cyd->scope_enabled)
++		return 0;
++
++	if (channel < 0 || channel >= CYD_MAX_CHANNELS)
++		return 0;
++
++	if (num_samples > CYD_SCOPE_BUFFER_SIZE)
++		num_samples = CYD_SCOPE_BUFFER_SIZE;
++
++	read_pos = (cyd->scope_write_pos[channel] - num_samples + CYD_SCOPE_BUFFER_SIZE)
++		& CYD_SCOPE_BUFFER_MASK;
++
++	for (i = 0; i < num_samples; i++)
++	{
++		buffer[i] = cyd->scope_buffer[channel][read_pos];
++		read_pos = (read_pos + 1) & CYD_SCOPE_BUFFER_MASK;
++	}
++
++	return num_samples;
++}
+--- a/src/snd/cyd.h
++++ b/src/snd/cyd.h
+@@ -133,6 +133,10 @@ enum
+
+ #define CYD_NUM_LFSR 16
+
++/* Scope capture ring buffer constants */
++#define CYD_SCOPE_BUFFER_SIZE 1024
++#define CYD_SCOPE_BUFFER_MASK (CYD_SCOPE_BUFFER_SIZE - 1)
++
+ typedef struct CydEngine_t
+ {
+ 	CydChannel *channel;
+@@ -166,6 +170,11 @@ typedef struct CydEngine_t
+ #endif
+ 	Uint64 samples_played;
+ 	int oversample;
++
++	/* Scope capture ring buffers for per-channel audio visualization */
++	float scope_buffer[CYD_MAX_CHANNELS][CYD_SCOPE_BUFFER_SIZE];
++	Uint32 scope_write_pos[CYD_MAX_CHANNELS];
++	int scope_enabled;
+ } CydEngine;
+
+ enum
+@@ -223,4 +232,7 @@ void cyd_output_buffer_stereo(int chan, void *_stream, int len, void *udata);
+ Sint32 cyd_env_output(const CydEngine *cyd, Uint32 channel_flags, const CydAdsr *adsr, Sint32 input);
+ Uint32 cyd_cycle_adsr(const CydEngine *eng, Uint32 flags, Uint32 ym_env_shape, CydAdsr *adsr);
+
++void cyd_enable_scope_capture(CydEngine *cyd, int enable);
++Uint32 cyd_get_scope_data(CydEngine *cyd, int channel, float *buffer, Uint32 num_samples);
++
+ #endif

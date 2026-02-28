@@ -1,0 +1,23 @@
+--- a/src/a2m-v2.cpp
++++ b/src/a2m-v2.cpp
+@@ -210,16 +210,18 @@
+
+ inline tINSTR_DATA *Ca2mv2Player::get_instr_data_by_ch(int chan)
+ {
++    static tINSTR_DATA empty_instr = {};
+     tINSTR_DATA_EXT *instrument = get_instr(ch->voice_table[chan]);
+
+-    return instrument ? &instrument->instr_data : NULL;
++    return instrument ? &instrument->instr_data : &empty_instr;
+ }
+
+ inline tINSTR_DATA *Ca2mv2Player::get_instr_data(uint8_t ins)
+ {
++    static tINSTR_DATA empty_instr = {};
+     tINSTR_DATA_EXT *instrument = get_instr(ins);
+
+-    return instrument ? &instrument->instr_data : NULL;
++    return instrument ? &instrument->instr_data : &empty_instr;
+ }
+
+ // Helpers for macro tables =======================================================================

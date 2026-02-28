@@ -1,0 +1,11 @@
+--- a/src/engine/engine.cpp
++++ b/src/engine/engine.cpp
+@@ -4020,7 +4020,7 @@
+
+ bool DivEngine::prePreInit() {
+   // init config
+-  initConfDir();
++  //initConfDir();
+   logD("config path: %s",configPath.c_str());
+
+   configLoaded=true;

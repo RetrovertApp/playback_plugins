@@ -1,0 +1,11 @@
+--- a/src/engine/platform/sound/ymf278b/ymf278.h
++++ b/src/engine/platform/sound/ymf278b/ymf278.h
+@@ -3,6 +3,8 @@
+ #include <vector>
+ #include <string>
+ #include <algorithm>
++#include <cassert>
++#include <cstdint>
+
+ #define UNREACHABLE while (1) assert(false)
+

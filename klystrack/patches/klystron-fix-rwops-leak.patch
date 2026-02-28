@@ -1,0 +1,12 @@
+--- a/src/lib/ksnd.c
++++ b/src/lib/ksnd.c
+@@ -85,6 +85,9 @@ KLYSAPI KSong* KSND_LoadSongFromMemory(KPlayer* player, void *data, int data_si
+
+ 	if (mus_load_song_RW(ops, &song->song, song->wavetable_entries))
+ 	{
++#ifndef USESDL_RWOPS
++		free(ops);
++#endif
+ 		return song;
+ 	}
+ 	else

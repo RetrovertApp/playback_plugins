@@ -1,0 +1,93 @@
+--- a/src/formats/packed/compiledst3.cpp	2026-02-18 12:58:21.000955379 +0100
++++ b/src/formats/packed/compiledst3.cpp	2026-02-18 12:58:21.005255584 +0100
+@@ -88,7 +88,7 @@
+     {
+       // 28 is fixed
+       // 27 is title
+-      const auto* const titleStart = info.begin() + 28;
++      const auto titleStart = info.begin() + 28;
+       return std::none_of(titleStart, info.end(), [](auto c) { return c > ' '; });
+     }
+   }  // namespace CompiledST3
+--- a/src/formats/packed/compiledstp.cpp	2026-02-18 12:58:21.000959119 +0100
++++ b/src/formats/packed/compiledstp.cpp	2026-02-18 12:58:21.005297724 +0100
+@@ -159,7 +159,7 @@
+     {
+       // 28 is fixed
+       // 25 is title
+-      const auto* const titleStart = info.begin() + 28;
++      const auto titleStart = info.begin() + 28;
+       return std::none_of(titleStart, info.end(), [](auto b) { return b > ' '; });
+     }
+   }  // namespace CompiledSTP
+--- a/src/parameters/src/convert.cpp	2026-02-18 12:58:21.003349679 +0100
++++ b/src/parameters/src/convert.cpp	2026-02-18 12:58:21.005739490 +0100
+@@ -45,7 +45,7 @@
+   {
+     const auto size = (val.size() - 1) / 2;
+     Binary::DataBuilder builder(size);
+-    const auto* src = val.begin();
++    auto src = val.begin();
+     for (std::size_t i = 0; i < size; ++i)
+     {
+       const auto highNibble = FromHex(*++src);
+--- a/src/formats/chiptune/aym/protracker3_vortex.cpp	2026-02-18 12:58:21.000366213 +0100
++++ b/src/formats/chiptune/aym/protracker3_vortex.cpp	2026-02-18 12:58:21.006854651 +0100
+@@ -255,7 +255,7 @@
+       explicit SignedHexObject(StringView val)
+       {
+         Require(val.size() == Width + 1);
+-        const auto* it = val.begin();
++        auto it = val.begin();
+         const SignFlag sign(*it);
+         for (++it; it != val.end(); ++it)
+         {
+@@ -833,7 +833,7 @@
+     private:
+       uint_t AsInt() const
+       {
+-        const auto* const notePos = std::find(NOTES.begin(), NOTES.end(), Val.substr(0, 2));
++        const auto notePos = std::find(NOTES.begin(), NOTES.end(), Val.substr(0, 2));
+         Require(notePos != NOTES.end());
+         const uint_t halftone = notePos - NOTES.begin();
+         const char octave = Val[2];
+--- a/src/strings/src/encoding.cpp	2026-02-18 12:58:21.004275702 +0100
++++ b/src/strings/src/encoding.cpp	2026-02-18 12:58:21.007468496 +0100
+@@ -771,7 +771,7 @@
+   public:
+     bool Check(StringView str) const override
+     {
+-      for (const auto* it = str.begin(); it != str.end(); ++it)
++      for (auto it = str.begin(); it != str.end(); ++it)
+       {
+         const uint8_t s1 = *it;
+         if (s1 == 0x80 || s1 == 0xa0 || s1 >= 0xf0)
+@@ -807,7 +807,7 @@
+     {
+       std::vector<uint32_t> result;
+       result.reserve(str.size());
+-      for (const auto* it = str.begin(); it != str.end(); ++it)
++      for (auto it = str.begin(); it != str.end(); ++it)
+       {
+         const uint8_t s1 = *it;
+         if (s1 == 0x5c)
+@@ -923,7 +923,7 @@
+     Strings::Utf8Builder builder;
+     builder.Reserve(str.size());
+     bool needSwap = false;
+-    for (const auto* it = str.begin(); it != str.end();)
++    for (auto it = str.begin(); it != str.end();)
+     {
+       const uint32_t sym = needSwap ? swapBytes(*it) : (*it);
+       ++it;
+--- a/src/formats/packed/zxzip_file.cpp	2026-02-18 12:58:21.000000000 +0100
++++ b/src/formats/packed/zxzip_file.cpp	2026-02-18 12:58:21.000000000 +0100
+@@ -437,7 +437,7 @@
+           LZWTree tree;
+           ResetTree(tree);
+ 
+-          auto* lastFree = tree.begin() + LZWEntry::LIMITER;
++          auto lastFree = tree.begin() + LZWEntry::LIMITER;
+ 
+           uint_t codeSize = 9;
+           uint_t oldCode = stream.GetBits(codeSize);

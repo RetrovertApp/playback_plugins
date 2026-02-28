@@ -1,0 +1,280 @@
+diff -ruN a/src/builders/residfp-builder/residfp/SID.cpp b/src/builders/residfp-builder/residfp/SID.cpp
+--- a/src/builders/residfp-builder/residfp/SID.cpp	2026-02-21 13:29:06.497760866 +0100
++++ b/src/builders/residfp-builder/residfp/SID.cpp	2026-02-21 13:30:05.209690944 +0100
+@@ -143,7 +143,11 @@
+     filter6581(new Filter6581()),
+     filter8580(new Filter8580()),
+     resampler(nullptr),
+-    cws(AVERAGE)
++    cws(AVERAGE),
++    scopeWritePos{0, 0, 0},
++    scopeAccum{0.0, 0.0, 0.0},
++    scopeAccumCount(0),
++    scopeEnabled(false)
+ {
+     voice[0].setOtherVoices(voice[2], voice[1]);
+     voice[1].setOtherVoices(voice[0], voice[2]);
+@@ -322,6 +326,14 @@
+     busValue = 0;
+     busValueTtl = 0;
+     voiceSync(false);
++
++    // Reset scope capture state
++    for (int i = 0; i < 3; i++)
++    {
++        scopeWritePos[i] = 0;
++        scopeAccum[i] = 0.0;
++    }
++    scopeAccumCount = 0;
+ }
+ 
+ void SID::input(int value)
+@@ -539,4 +551,49 @@
+     }
+ }
+ 
++void SID::enableScopeCapture(bool enable)
++{
++    scopeEnabled = enable;
++
++    if (enable)
++    {
++        for (int i = 0; i < 3; i++)
++        {
++            scopeWritePos[i] = 0;
++            scopeAccum[i] = 0.0;
++            std::memset(scopeBuffer[i], 0, sizeof(scopeBuffer[i]));
++        }
++        scopeAccumCount = 0;
++    }
++}
++
++unsigned int SID::getScopeData(int voiceIdx, float* buffer, unsigned int numSamples)
++{
++    if (buffer == nullptr || !scopeEnabled)
++    {
++        return 0;
++    }
++
++    if (voiceIdx < 0 || voiceIdx >= 3)
++    {
++        return 0;
++    }
++
++    if (numSamples > SID_SCOPE_BUFFER_SIZE)
++    {
++        numSamples = SID_SCOPE_BUFFER_SIZE;
++    }
++
++    unsigned int writePos = scopeWritePos[voiceIdx];
++    unsigned int readPos = (writePos - numSamples + SID_SCOPE_BUFFER_SIZE) & SID_SCOPE_BUFFER_MASK;
++
++    for (unsigned int i = 0; i < numSamples; i++)
++    {
++        buffer[i] = scopeBuffer[voiceIdx][readPos];
++        readPos = (readPos + 1) & SID_SCOPE_BUFFER_MASK;
++    }
++
++    return numSamples;
++}
++
+ } // namespace reSIDfp
+diff -ruN a/src/builders/residfp-builder/residfp/SID.h b/src/builders/residfp-builder/residfp/SID.h
+--- a/src/builders/residfp-builder/residfp/SID.h	2026-02-21 13:29:06.497765836 +0100
++++ b/src/builders/residfp-builder/residfp/SID.h	2026-02-21 13:29:42.425278121 +0100
+@@ -25,6 +25,7 @@
+ 
+ #include <memory>
+ #include <cstdint>
++#include <cstring>
+ 
+ #include "siddefs-fp.h"
+ #include "ExternalFilter.h"
+@@ -36,6 +37,10 @@
+ namespace reSIDfp
+ {
+ 
++/// Scope capture ring buffer size (must be power of 2)
++static const unsigned int SID_SCOPE_BUFFER_SIZE = 1024;
++static const unsigned int SID_SCOPE_BUFFER_MASK = SID_SCOPE_BUFFER_SIZE - 1;
++
+ class Filter;
+ class Filter6581;
+ class Filter8580;
+@@ -123,6 +128,17 @@
+      */
+     float oscDAC[4096];
+ 
++    /// Scope capture ring buffers (one per voice)
++    float scopeBuffer[3][SID_SCOPE_BUFFER_SIZE];
++    /// Scope capture write positions
++    unsigned int scopeWritePos[3];
++    /// Per-voice accumulators for downsampling (double for precision)
++    double scopeAccum[3];
++    /// Number of cycles accumulated since last output sample
++    unsigned int scopeAccumCount;
++    /// Whether scope capture is enabled
++    bool scopeEnabled;
++
+ private:
+     /**
+      * Age the bus value and zero it if it's TTL has expired.
+@@ -288,6 +304,24 @@
+      * @param enable false to turn off filter emulation
+      */
+     void enableFilter(bool enable);
++
++    /**
++     * Enable or disable per-voice scope capture.
++     *
++     * @param enable true to enable scope capture
++     */
++    void enableScopeCapture(bool enable);
++
++    /**
++     * Retrieve per-voice scope data from the ring buffer.
++     * Returns the most recent samples for the specified voice.
++     *
++     * @param voiceIdx voice index (0-2)
++     * @param buffer output buffer for float samples [-1.0, 1.0]
++     * @param numSamples maximum number of samples to retrieve
++     * @return actual number of samples written to buffer
++     */
++    unsigned int getScopeData(int voiceIdx, float* buffer, unsigned int numSamples);
+ };
+ 
+ } // namespace reSIDfp
+@@ -344,9 +378,39 @@
+                 voice[2].envelope()->clock();
+ 
+                 const int sidOutput = static_cast<int>(filter->clock(voice[0], voice[1], voice[2]));
++
++                // Scope capture: accumulate per-voice output each cycle
++                if (scopeEnabled)
++                {
++                    for (int v = 0; v < 3; v++)
++                    {
++                        scopeAccum[v] += static_cast<double>(voice[v].output());
++                    }
++                    scopeAccumCount++;
++                }
++
+                 const int c64Output = externalFilter.clock(sidOutput + INT16_MIN);
+                 if (unlikely(resampler->input(c64Output)))
+                 {
++                    // Scope capture: write averaged sample when resampler produces output
++                    if (scopeEnabled && scopeAccumCount > 0)
++                    {
++                        const double inv = 1.0 / static_cast<double>(scopeAccumCount);
++                        // Normalize: voice output range is ~+-522240, use 524288 (2^19)
++                        const float norm = 1.0f / 524288.0f;
++                        for (int v = 0; v < 3; v++)
++                        {
++                            float sample = static_cast<float>(scopeAccum[v] * inv) * norm;
++                            // Clamp to [-1, 1]
++                            if (sample > 1.0f) sample = 1.0f;
++                            else if (sample < -1.0f) sample = -1.0f;
++                            scopeBuffer[v][scopeWritePos[v] & SID_SCOPE_BUFFER_MASK] = sample;
++                            scopeWritePos[v]++;
++                            scopeAccum[v] = 0.0;
++                        }
++                        scopeAccumCount = 0;
++                    }
++
+                     buf[s++] = resampler->getOutput(scaleFactor);
+                 }
+             }
+diff -ruN a/src/builders/residfp-builder/residfp-builder.cpp b/src/builders/residfp-builder/residfp-builder.cpp
+--- a/src/builders/residfp-builder/residfp-builder.cpp	2026-02-21 13:29:06.497611858 +0100
++++ b/src/builders/residfp-builder/residfp-builder.cpp	2026-02-21 13:30:42.111359518 +0100
+@@ -95,3 +95,30 @@
+     for (libsidplayfp::sidemu* e: sidobjs)
+         static_cast<libsidplayfp::ReSIDfp*>(e)->combinedWaveforms(cws);
+ }
++
++void ReSIDfpBuilder::enableScopeCapture(bool enable)
++{
++    // Enable on all SID instances for multi-SID support
++    for (libsidplayfp::sidemu* e : sidobjs)
++        static_cast<libsidplayfp::ReSIDfp*>(e)->enableScopeCapture(enable);
++}
++
++unsigned int ReSIDfpBuilder::getScopeData(int channel, float* buffer, unsigned int numSamples)
++{
++    // Map channel to SID instance and voice
++    // Channels 0-2 = SID 0, 3-5 = SID 1, 6-8 = SID 2
++    int sidIdx = channel / 3;
++    int voiceIdx = channel % 3;
++
++    int i = 0;
++    for (libsidplayfp::sidemu* e : sidobjs)
++    {
++        if (i == sidIdx)
++        {
++            return static_cast<libsidplayfp::ReSIDfp*>(e)->getScopeData(voiceIdx, buffer, numSamples);
++        }
++        i++;
++    }
++
++    return 0;
++}
+diff -ruN a/src/builders/residfp-builder/residfp-emu.cpp b/src/builders/residfp-builder/residfp-emu.cpp
+--- a/src/builders/residfp-builder/residfp-emu.cpp	2026-02-21 13:29:06.497615738 +0100
++++ b/src/builders/residfp-builder/residfp-emu.cpp	2026-02-21 13:30:22.501004227 +0100
+@@ -197,4 +197,14 @@
+     m_status = true;
+ }
+ 
++void ReSIDfp::enableScopeCapture(bool enable)
++{
++    m_sid.enableScopeCapture(enable);
++}
++
++unsigned int ReSIDfp::getScopeData(int voice, float* buffer, unsigned int numSamples)
++{
++    return m_sid.getScopeData(voice, buffer, numSamples);
++}
++
+ }
+diff -ruN a/src/builders/residfp-builder/residfp-emu.h b/src/builders/residfp-builder/residfp-emu.h
+--- a/src/builders/residfp-builder/residfp-emu.h	2026-02-21 13:29:06.497619648 +0100
++++ b/src/builders/residfp-builder/residfp-emu.h	2026-02-21 13:30:14.004850295 +0100
+@@ -72,6 +72,10 @@
+     void filter6581Range(double adjustment);
+     void filter8580Curve(double filterCurve);
+     void combinedWaveforms(SidConfig::sid_cw_t cws);
++
++    // Scope capture
++    void enableScopeCapture(bool enable);
++    unsigned int getScopeData(int voice, float* buffer, unsigned int numSamples);
+ };
+ 
+ }
+diff -ruN a/src/builders/residfp-builder/residfp.h b/src/builders/residfp-builder/residfp.h
+--- a/src/builders/residfp-builder/residfp.h	2026-02-21 13:29:06.497622708 +0100
++++ b/src/builders/residfp-builder/residfp.h	2026-02-21 13:30:32.581186856 +0100
+@@ -88,6 +88,24 @@
+      */
+     void combinedWaveformsStrength(SidConfig::sid_cw_t cws);
+ 
++    /**
++     * Enable or disable per-voice scope capture on all SID instances.
++     *
++     * @param enable true to enable scope capture
++     */
++    void enableScopeCapture(bool enable);
++
++    /**
++     * Retrieve per-voice scope data from the specified channel.
++     * Channels are mapped across SID instances: 0-2 = SID 0, 3-5 = SID 1, 6-8 = SID 2.
++     *
++     * @param channel channel index (0-8 for up to 3 SIDs)
++     * @param buffer output buffer for float samples [-1.0, 1.0]
++     * @param numSamples maximum number of samples to retrieve
++     * @return actual number of samples written to buffer
++     */
++    unsigned int getScopeData(int channel, float* buffer, unsigned int numSamples);
++
+     //@}
+ };
+ 

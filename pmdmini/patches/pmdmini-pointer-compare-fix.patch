@@ -1,0 +1,11 @@
+--- a/src/pmdwin/pmdwin.cpp
++++ b/src/pmdwin/pmdwin.cpp
+@@ -7454,7 +7454,7 @@
+ {
+ 	int		i = 0;
+ 
+-	while(path[i] != '\0' && i < MAX_PCMDIR) {
++	while(path[i] != NULL && i < MAX_PCMDIR) {
+ 		if(*path[i] == '\0') break;
+ 		strcpy(open_work.pcmdir[i], path[i]);
+ 

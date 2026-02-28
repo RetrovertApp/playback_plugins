@@ -1,0 +1,12 @@
+cpu_type=68000
+cpu_speed=max
+cpu_compatible=false
+chipmem_size=4
+fastmem_size=0
+bogomem_size=0
+sound_output=exact
+sound_frequency=48000
+sound_channels=stereo
+sound_bits=16
+use_gui=no
+use_debugger=no

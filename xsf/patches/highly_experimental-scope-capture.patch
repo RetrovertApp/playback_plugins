@@ -1,0 +1,210 @@
+--- a/Core/spucore.h
++++ b/Core/spucore.h
+@@ -9,6 +9,11 @@
+
+ #include "emuconfig.h"
+
++/* Scope capture ring buffer constants */
++#define SPUCORE_SCOPE_BUFFER_SIZE  1024
++#define SPUCORE_SCOPE_BUFFER_MASK  (SPUCORE_SCOPE_BUFFER_SIZE - 1)
++#define SPUCORE_SCOPE_NUM_CHANNELS 24
++
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+@@ -33,6 +38,27 @@
+ uint32 EMU_CALL spucore_cycles_until_interrupt(void *state, uint16 *ram, uint32 samples);
+
+ /*
++** Enable or disable per-channel scope capture.
++*/
++void EMU_CALL spucore_enable_scope_capture(void *state, int enable);
++
++/*
++** Retrieve per-channel scope data from ring buffer.
++** channel: 0-23
++** buffer: output float samples
++** num_samples: max samples to retrieve
++** Returns number of samples written.
++*/
++uint32 EMU_CALL spucore_get_scope_data(void *state, int channel,
++                                       float *buffer, uint32 num_samples);
++
++/*
++** Get the number of scope channels available.
++** Returns 24.
++*/
++int EMU_CALL spucore_get_scope_channel_count(void *state);
++
++/*
+ ** Register definitions
+ */
+
+--- a/Core/spucore.c
++++ b/Core/spucore.c
+@@ -408,6 +408,11 @@
+   sint32 noiseval;
+   uint32 irq_decoder_clock;
+   uint32 irq_triggered_cycle;
++
++  /* Scope capture ring buffers for per-channel audio visualization */
++  float  scope_buffer[SPUCORE_SCOPE_NUM_CHANNELS][SPUCORE_SCOPE_BUFFER_SIZE];
++  uint32 scope_write_pos[SPUCORE_SCOPE_NUM_CHANNELS];
++  int    scope_enabled;
+ };
+
+ struct SPUCORE_IRQ_STATE {
+@@ -1781,13 +1786,38 @@
+     r = render_channel_mono(
+       ram, state->memsize, state->chan + ch, b, fm, noise, samples, irq_state_ptr
+     );
+     if(!b) {
+       memset(ibuffm, 0, 4 * samples);
++      if(state->scope_enabled) {
++        uint32 wpos = state->scope_write_pos[ch];
++        for(i = 0; i < samples; i++) {
++          state->scope_buffer[ch][wpos & SPUCORE_SCOPE_BUFFER_MASK] = 0.0f;
++          wpos++;
++        }
++        state->scope_write_pos[ch] = wpos;
++      }
+       continue;
+     }
+     memcpy(ibuffm, ibuf, 4 * r);
+     if(r < samples) memset(ibuffm + r, 0, 4 * (samples-r));
+     v_l = volume_getlevel(state->chan[ch].vol+0);
+     v_r = volume_getlevel(state->chan[ch].vol+1);
++    /* Capture per-channel scope data with channel volume applied */
++    if(state->scope_enabled) {
++      sint32 vol = v_l > 0 ? v_l : -v_l;
++      sint32 vr  = v_r > 0 ? v_r : -v_r;
++      if(vr > vol) vol = vr;
++      uint32 wpos = state->scope_write_pos[ch];
++      for(i = 0; i < r; i++) {
++        state->scope_buffer[ch][wpos & SPUCORE_SCOPE_BUFFER_MASK] =
++          (float)((vol * ibuf[i]) >> 15) / 32768.0f;
++        wpos++;
++      }
++      for(i = r; i < samples; i++) {
++        state->scope_buffer[ch][wpos & SPUCORE_SCOPE_BUFFER_MASK] = 0.0f;
++        wpos++;
++      }
++      state->scope_write_pos[ch] = wpos;
++    }
+     for(i = 0; i < r; i++) {
+       sint32 q_l = (v_l * ibuf[i]) >> 16;
+@@ -2182,3 +2212,53 @@
+ }
+
+ ////////////////////////////////////////////////////////////////////////////////
++
++void EMU_CALL spucore_enable_scope_capture(void *state, int enable) {
++  int i;
++  uint32 j;
++
++  if(!state) return;
++
++  SPUCORESTATE->scope_enabled = enable;
++
++  if(enable) {
++    for(i = 0; i < SPUCORE_SCOPE_NUM_CHANNELS; i++) {
++      SPUCORESTATE->scope_write_pos[i] = 0;
++      for(j = 0; j < SPUCORE_SCOPE_BUFFER_SIZE; j++) {
++        SPUCORESTATE->scope_buffer[i][j] = 0.0f;
++      }
++    }
++  }
++}
++
++uint32 EMU_CALL spucore_get_scope_data(void *state, int channel,
++                                       float *buffer, uint32 num_samples) {
++  uint32 read_pos;
++  uint32 i;
++
++  if(!state || !buffer || !SPUCORESTATE->scope_enabled)
++    return 0;
++
++  if(channel < 0 || channel >= SPUCORE_SCOPE_NUM_CHANNELS)
++    return 0;
++
++  if(num_samples > SPUCORE_SCOPE_BUFFER_SIZE)
++    num_samples = SPUCORE_SCOPE_BUFFER_SIZE;
++
++  read_pos = (SPUCORESTATE->scope_write_pos[channel] - num_samples
++              + SPUCORE_SCOPE_BUFFER_SIZE) & SPUCORE_SCOPE_BUFFER_MASK;
++
++  for(i = 0; i < num_samples; i++) {
++    buffer[i] = SPUCORESTATE->scope_buffer[channel][read_pos];
++    read_pos = (read_pos + 1) & SPUCORE_SCOPE_BUFFER_MASK;
++  }
++
++  return num_samples;
++}
++
++int EMU_CALL spucore_get_scope_channel_count(void *state) {
++  (void)state;
++  return SPUCORE_SCOPE_NUM_CHANNELS;
++}
++
++////////////////////////////////////////////////////////////////////////////////
+--- a/Core/spu.h
++++ b/Core/spu.h
+@@ -38,6 +38,23 @@
+ */
+ void EMU_CALL spu_enable_mute(void *state, uint8 channel, uint8 enable);
+
++/*
++** Enable or disable per-channel scope capture.
++*/
++void EMU_CALL spu_enable_scope_capture(void *state, int enable);
++
++/*
++** Retrieve per-channel scope data.
++** For PS1: channels 0-23. For PS2: channels 0-23 (core 0), 24-47 (core 1).
++*/
++uint32 EMU_CALL spu_get_scope_data(void *state, int channel,
++                                   float *buffer, uint32 num_samples);
++
++/*
++** Get number of scope channels (24 for PS1, 48 for PS2).
++*/
++int EMU_CALL spu_get_scope_channel_count(void *state);
++
+ #ifdef __cplusplus
+ }
+ #endif
+--- a/Core/spu.c
++++ b/Core/spu.c
+@@ -820,3 +820,32 @@
+ }
+
+ ////////////////////////////////////////////////////////////////////////////////
++
++void EMU_CALL spu_enable_scope_capture(void *state, int enable) {
++  spucore_enable_scope_capture(CORESTATE(0), enable);
++  if(SPUSTATE->version == 2) {
++    spucore_enable_scope_capture(CORESTATE(1), enable);
++  }
++}
++
++uint32 EMU_CALL spu_get_scope_data(void *state, int channel,
++                                   float *buffer, uint32 num_samples) {
++  if(SPUSTATE->version == 2) {
++    if(channel < 24) {
++      return spucore_get_scope_data(CORESTATE(0), channel, buffer, num_samples);
++    } else if(channel < 48) {
++      return spucore_get_scope_data(CORESTATE(1), channel - 24, buffer, num_samples);
++    }
++    return 0;
++  }
++  return spucore_get_scope_data(CORESTATE(0), channel, buffer, num_samples);
++}
++
++int EMU_CALL spu_get_scope_channel_count(void *state) {
++  if(SPUSTATE->version == 2) {
++    return 48;
++  }
++  return 24;
++}
++
++////////////////////////////////////////////////////////////////////////////////

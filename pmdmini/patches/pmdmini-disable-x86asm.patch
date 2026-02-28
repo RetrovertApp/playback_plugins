@@ -1,0 +1,11 @@
+--- a/src/fmgen/fmgen.cpp
++++ b/src/fmgen/fmgen.cpp
+@@ -33,7 +33,7 @@
+ #define LOGNAME "fmgen"
+ #include "diag.h"
+
+-#if _MSC_VER >= 1200
++#if _MSC_VER >= 1200 && defined(_M_IX86) && !defined(__clang__)
+ 	#define FM_USE_X86_CODE
+ #endif
+

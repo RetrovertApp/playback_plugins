@@ -1,0 +1,294 @@
+--- a/src/nukedopl.h
++++ b/src/nukedopl.h
+@@ -39,6 +39,12 @@
+ 
+ #include <inttypes.h>
+ 
++/* Scope capture ring buffer constants */
++#define OPL3_SCOPE_BUFFER_SIZE  1024
++#define OPL3_SCOPE_BUFFER_MASK  (OPL3_SCOPE_BUFFER_SIZE - 1)
++#define OPL3_SCOPE_NUM_CHANNELS 18
++#define OPL3_SCOPE_NORMALIZE    (1.0f / 32768.0f)
++
+ #ifndef OPL_ENABLE_STEREOEXT
+ #define OPL_ENABLE_STEREOEXT 0
+ #endif
+@@ -152,8 +158,33 @@
+     uint32_t writebuf_last;
+     uint64_t writebuf_lasttime;
+     opl3_writebuf writebuf[OPL_WRITEBUF_SIZE];
++
++    /* Per-channel scope capture ring buffers */
++    float    scope_buffer[OPL3_SCOPE_NUM_CHANNELS][OPL3_SCOPE_BUFFER_SIZE];
++    uint32_t scope_write_pos[OPL3_SCOPE_NUM_CHANNELS];
++    int      scope_enabled;
+ };
+ 
++/**
++ * Enable or disable per-channel scope capture.
++ *
++ * @param chip    OPL3 chip instance
++ * @param enable  Non-zero to enable, zero to disable
++ */
++void OPL3_EnableScopeCapture(opl3_chip *chip, int enable);
++
++/**
++ * Retrieve per-channel scope data from ring buffer.
++ *
++ * @param chip        OPL3 chip instance
++ * @param channel     Channel index (0-17)
++ * @param buffer      Output buffer for float samples
++ * @param num_samples Maximum number of samples to retrieve
++ * @return Number of samples written to buffer
++ */
++uint32_t OPL3_GetScopeData(opl3_chip *chip, int channel,
++                            float *buffer, uint32_t num_samples);
++
+ void OPL3_Generate(opl3_chip *chip, int16_t *buf);
+ void OPL3_GenerateResampled(opl3_chip *chip, int16_t *buf);
+ void OPL3_Reset(opl3_chip *chip, uint32_t samplerate);
+--- a/src/nukedopl.c
++++ b/src/nukedopl.c
+@@ -1141,6 +1141,13 @@
+         channel = &chip->channel[ii];
+         out = channel->out;
+         accm = *out[0] + *out[1] + *out[2] + *out[3];
++
++        /* Capture per-channel scope data before stereo accumulation */
++        if (chip->scope_enabled) {
++            chip->scope_buffer[ii][chip->scope_write_pos[ii] & OPL3_SCOPE_BUFFER_MASK] = (float)accm * OPL3_SCOPE_NORMALIZE;
++            chip->scope_write_pos[ii]++;
++        }
++
+ #if OPL_ENABLE_STEREOEXT
+         mix[0] += (int16_t)((accm * channel->leftpan) >> 16);
+ #else
+@@ -1533,3 +1540,49 @@
+         sndptr += 2;
+     }
+ }
++
++void OPL3_EnableScopeCapture(opl3_chip *chip, int enable)
++{
++    uint8_t ch;
++    uint32_t j;
++
++    if (!chip)
++        return;
++
++    chip->scope_enabled = enable;
++
++    if (enable) {
++        for (ch = 0; ch < OPL3_SCOPE_NUM_CHANNELS; ch++) {
++            chip->scope_write_pos[ch] = 0;
++            for (j = 0; j < OPL3_SCOPE_BUFFER_SIZE; j++) {
++                chip->scope_buffer[ch][j] = 0.0f;
++            }
++        }
++    }
++}
++
++uint32_t OPL3_GetScopeData(opl3_chip *chip, int channel,
++                            float *buffer, uint32_t num_samples)
++{
++    uint32_t read_pos;
++    uint32_t i;
++
++    if (!chip || !buffer || !chip->scope_enabled)
++        return 0;
++
++    if (channel < 0 || channel >= OPL3_SCOPE_NUM_CHANNELS)
++        return 0;
++
++    if (num_samples > OPL3_SCOPE_BUFFER_SIZE)
++        num_samples = OPL3_SCOPE_BUFFER_SIZE;
++
++    read_pos = (chip->scope_write_pos[channel] - num_samples + OPL3_SCOPE_BUFFER_SIZE)
++        & OPL3_SCOPE_BUFFER_MASK;
++
++    for (i = 0; i < num_samples; i++) {
++        buffer[i] = chip->scope_buffer[channel][read_pos];
++        read_pos = (read_pos + 1) & OPL3_SCOPE_BUFFER_MASK;
++    }
++
++    return num_samples;
++}
+--- a/src/fmopl.h
++++ b/src/fmopl.h
+@@ -6,6 +6,14 @@
+ //#define BUILD_YM3526 (HAS_YM3526)
+ //#define BUILD_Y8950  (HAS_Y8950)
+ 
++#include <stdint.h>
++
++/* Scope capture ring buffer constants */
++#define FMOPL_SCOPE_BUFFER_SIZE  1024
++#define FMOPL_SCOPE_BUFFER_MASK  (FMOPL_SCOPE_BUFFER_SIZE - 1)
++#define FMOPL_SCOPE_NUM_CHANNELS 9
++#define FMOPL_SCOPE_NORMALIZE    (1.0f / 32768.0f)
++
+ /* --- system optimize --- */
+ /* select bit size of output : 8 or 16 */
+ #define OPL_OUTPUT_BIT 16
+@@ -147,6 +155,11 @@
+ 	int UpdateParam;					/* stream update parameter */
+ } FM_OPL;
+ 
++/* Scope capture ring buffers (stored externally since FM_OPL is heap-allocated) */
++extern float    fmopl_scope_buffer[2][FMOPL_SCOPE_NUM_CHANNELS][FMOPL_SCOPE_BUFFER_SIZE];
++extern uint32_t fmopl_scope_write_pos[2][FMOPL_SCOPE_NUM_CHANNELS];
++extern int      fmopl_scope_enabled;
++
+ /* ---------- Generic interface section ---------- */
+ #define OPL_TYPE_YM3526 (0)
+ #define OPL_TYPE_YM3812 (OPL_TYPE_WAVESEL)
+@@ -171,4 +184,29 @@
+ 
+ void Y8950UpdateOne(FM_OPL *OPL, INT16 *buffer, int length);
+ 
++/**
++ * Enable or disable per-channel scope capture for FMOPL.
++ *
++ * @param enable  Non-zero to enable, zero to disable
++ */
++void FMOPL_EnableScopeCapture(int enable);
++
++/**
++ * Retrieve per-channel scope data from FMOPL ring buffer.
++ *
++ * @param chip_index  OPL chip index (0 or 1 for dual OPL2)
++ * @param channel     Channel index (0-8)
++ * @param buffer      Output buffer for float samples
++ * @param num_samples Maximum number of samples to retrieve
++ * @return Number of samples written to buffer
++ */
++uint32_t FMOPL_GetScopeData(int chip_index, int channel,
++                             float *buffer, uint32_t num_samples);
++
++/**
++ * Set which chip instance is being rendered (call before YM3812UpdateOne).
++ * @param index  Chip index (0 or 1)
++ */
++void FMOPL_SetCurrentChip(int index);
++
+ #endif
+--- a/src/fmopl.c
++++ b/src/fmopl.c
+@@ -237,6 +237,12 @@
+ static INT32 vibIncr;
+ static INT32 feedback2;		/* connect for SLOT 2 */
+ 
++/* Scope capture state (global since FMOPL uses global statics for rendering) */
++float    fmopl_scope_buffer[2][FMOPL_SCOPE_NUM_CHANNELS][FMOPL_SCOPE_BUFFER_SIZE];
++uint32_t fmopl_scope_write_pos[2][FMOPL_SCOPE_NUM_CHANNELS];
++int      fmopl_scope_enabled = 0;
++static int fmopl_current_chip = 0;
++
+ /* log output level */
+ #define LOG_ERR  3      /* ERROR       */
+ #define LOG_WAR  2      /* WARNING     */
+@@ -1047,6 +1053,7 @@
+ /* ---------- update one of chip ----------- */
+ void YM3812UpdateOne(FM_OPL *OPL, INT16 *buffer, int length)
+ {
++	int ch_idx;
+     int i;
+ 	int data;
+ 	OPLSAMPLE *buf = buffer;
+@@ -1081,7 +1088,18 @@
+ 		outd[0] = 0;
+ 		/* FM part */
+ 		for(CH=S_CH ; CH < R_CH ; CH++)
++		{
++			INT32 before = outd[0];
+ 			OPL_CALC_CH(CH);
++			/* Capture per-channel scope data */
++			if (fmopl_scope_enabled) {
++				ch_idx = (int)(CH - S_CH);
++				INT32 delta = outd[0] - before;
++				float sample_f = (float)(delta >> OPL_OUTSB) * FMOPL_SCOPE_NORMALIZE;
++				fmopl_scope_buffer[fmopl_current_chip][ch_idx][fmopl_scope_write_pos[fmopl_current_chip][ch_idx] & FMOPL_SCOPE_BUFFER_MASK] = sample_f;
++				fmopl_scope_write_pos[fmopl_current_chip][ch_idx]++;
++			}
++		}
+ 		/* Rythn part */
+ 		if(rhythm)
+ 			OPL_CALC_RH(S_CH);
+@@ -1402,3 +1420,57 @@
+ 	if (OPL->TimerHandler) (OPL->TimerHandler)(OPL->TimerParam+c,(double)OPL->T[c]*OPL->TimerBase);
+ 	return OPL->status>>7;
+ }
++
++void FMOPL_EnableScopeCapture(int enable)
++{
++	int chip, ch;
++	unsigned int j;
++
++	fmopl_scope_enabled = enable;
++
++	if (enable) {
++		for (chip = 0; chip < 2; chip++) {
++			for (ch = 0; ch < FMOPL_SCOPE_NUM_CHANNELS; ch++) {
++				fmopl_scope_write_pos[chip][ch] = 0;
++				for (j = 0; j < FMOPL_SCOPE_BUFFER_SIZE; j++) {
++					fmopl_scope_buffer[chip][ch][j] = 0.0f;
++				}
++			}
++		}
++	}
++}
++
++uint32_t FMOPL_GetScopeData(int chip_index, int channel,
++                             float *buffer, uint32_t num_samples)
++{
++	uint32_t read_pos;
++	uint32_t i;
++
++	if (!buffer || !fmopl_scope_enabled)
++		return 0;
++
++	if (chip_index < 0 || chip_index >= 2)
++		return 0;
++
++	if (channel < 0 || channel >= FMOPL_SCOPE_NUM_CHANNELS)
++		return 0;
++
++	if (num_samples > FMOPL_SCOPE_BUFFER_SIZE)
++		num_samples = FMOPL_SCOPE_BUFFER_SIZE;
++
++	read_pos = (fmopl_scope_write_pos[chip_index][channel] - num_samples + FMOPL_SCOPE_BUFFER_SIZE)
++		& FMOPL_SCOPE_BUFFER_MASK;
++
++	for (i = 0; i < num_samples; i++) {
++		buffer[i] = fmopl_scope_buffer[chip_index][channel][read_pos];
++		read_pos = (read_pos + 1) & FMOPL_SCOPE_BUFFER_MASK;
++	}
++
++	return num_samples;
++}
++
++void FMOPL_SetCurrentChip(int index)
++{
++	if (index >= 0 && index < 2)
++		fmopl_current_chip = index;
++}
+--- a/src/emuopl.cpp
++++ b/src/emuopl.cpp
+@@ -76,6 +76,7 @@
+ 
+   switch(currType) {
+   case TYPE_OPL2:
++    FMOPL_SetCurrentChip(0);
+     //for opl2 mode:
+     //render chip0 to the output buffer
+     YM3812UpdateOne(opl[0],outbuf,samples);
+@@ -95,7 +96,9 @@
+   case TYPE_DUAL_OPL2:
+     //for dual opl2 mode:
+     //render each chip to a different tempbuffer
++    FMOPL_SetCurrentChip(0);
+     YM3812UpdateOne(opl[0],tempbuf2,samples);
++    FMOPL_SetCurrentChip(1);
+     YM3812UpdateOne(opl[1],tempbuf,samples);
+ 
+     //output stereo:

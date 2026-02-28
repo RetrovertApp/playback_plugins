@@ -1,0 +1,20 @@
+--- a/src/core/plugins/archives/raw_supp.cpp
++++ b/src/core/plugins/archives/raw_supp.cpp
+@@ -427,7 +427,7 @@
+
+     void Move(std::size_t step)
+     {
+-      if (!Subdata.unique())
++      if (Subdata.use_count() != 1)
+       {
+         Dbg("Subdata is captured. Duplicate.");
+         Subdata = MakePtr<ScanDataContainer>(Parent->GetData(), Subdata->GetOffset() + step);
+@@ -806,7 +806,7 @@
+         progress.Report(offset);
+         usedPlugins.SetOffset(offset);
+         const auto detectResult = usedPlugins.Detect(subLocation, callback);
+-        if (!subLocation.unique())
++        if (subLocation.use_count() != 1)
+         {
+           Dbg("Sublocation is captured. Duplicate.");
+           subLocation = MakePtr<ScanDataLocation>(input, offset);

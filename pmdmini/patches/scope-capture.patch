@@ -1,0 +1,250 @@
+--- a/src/fmgen/opna.h
++++ b/src/fmgen/opna.h
+@@ -7,6 +7,7 @@
+ #ifndef FM_OPNA_H
+ #define FM_OPNA_H
+ 
++#include <string.h>
+ #include "fmgen.h"
+ #include "fmtimer.h"
+ #include "psg.h"
+@@ -85,6 +86,12 @@
+ //
+ namespace FM
+ {
++
++#define OPNA_SCOPE_BUFFER_SIZE  1024
++#define OPNA_SCOPE_BUFFER_MASK  (OPNA_SCOPE_BUFFER_SIZE - 1)
++#define OPNA_SCOPE_FM_CHANNELS  6
++#define OPNA_SCOPE_SSG_CHANNELS 3
++#define OPNA_SCOPE_TOTAL_CHANNELS (OPNA_SCOPE_FM_CHANNELS + OPNA_SCOPE_SSG_CHANNELS)
+ 	//	OPN Base -------------------------------------------------------
+ 	class OPNBase : public Timer
+ 	{
+--- a/src/fmgen/opna.cpp
++++ b/src/fmgen/opna.cpp
+@@ -16,6 +16,58 @@
+ #define BUILD_OPNA
+ #define BUILD_OPNB
+ 
++
++// ---------------------------------------------------------------------------
++//	Per-channel scope capture (static globals - pmdmini is single-instance)
++// ---------------------------------------------------------------------------
++
++static float s_fm_scope_buffer[OPNA_SCOPE_FM_CHANNELS][OPNA_SCOPE_BUFFER_SIZE];
++static uint32 s_fm_scope_write_pos[OPNA_SCOPE_FM_CHANNELS];
++static int s_fm_scope_enabled = 0;
++
++// Normalization: ISample from Calc() shifted right by (FM_ISHIFT+3) = 6,
++// then clamped to [-0x10000, 0xffff]. We divide by 65536.0 to get [-1, 1].
++static inline float fm_normalize_isample(int32 s)
++{
++	int clamped = Limit(s >> 6, 0xffff, -0x10000);
++	return (float)clamped / 65536.0f;
++}
++
++extern "C" void psg_scope_enable(int enable);
++
++extern "C" void pmd_scope_enable(int enable)
++{
++	s_fm_scope_enabled = enable;
++	if (enable) {
++		memset(s_fm_scope_buffer, 0, sizeof(s_fm_scope_buffer));
++		memset(s_fm_scope_write_pos, 0, sizeof(s_fm_scope_write_pos));
++	}
++	psg_scope_enable(enable);
++}
++
++extern "C" unsigned int pmd_fm_scope_get_data(int channel, float *buffer,
++	unsigned int num_samples)
++{
++	if (!buffer || !s_fm_scope_enabled)
++		return 0;
++	if (channel < 0 || channel >= OPNA_SCOPE_FM_CHANNELS)
++		return 0;
++	if (num_samples > OPNA_SCOPE_BUFFER_SIZE)
++		num_samples = OPNA_SCOPE_BUFFER_SIZE;
++
++	unsigned int read_pos = (s_fm_scope_write_pos[channel] - num_samples
++		+ OPNA_SCOPE_BUFFER_SIZE) & OPNA_SCOPE_BUFFER_MASK;
++	for (unsigned int i = 0; i < num_samples; i++) {
++		buffer[i] = s_fm_scope_buffer[channel][read_pos];
++		read_pos = (read_pos + 1) & OPNA_SCOPE_BUFFER_MASK;
++	}
++	return num_samples;
++}
++
++extern "C" int pmd_scope_is_enabled(void)
++{
++	return s_fm_scope_enabled;
++}
+ // ---------------------------------------------------------------------------
+ //	OPNA: ADPCM データの格納方式の違い (8bit/1bit) をエミュレートしない
+ //	このオプションを有効にすると ADPCM メモリへのアクセス(特に 8bit モード)が
+@@ -1149,22 +1201,24 @@
+ 
+ void OPNABase::MixSubSL(int activech, ISample** dest)
+ {
+-	if (activech & 0x001) (*dest[0]  = ch[0].CalcL());
+-	if (activech & 0x004) (*dest[1] += ch[1].CalcL());
+-	if (activech & 0x010) (*dest[2] += ch[2].CalcL());
+-	if (activech & 0x040) (*dest[3] += ch[3].CalcL());
+-	if (activech & 0x100) (*dest[4] += ch[4].CalcL());
+-	if (activech & 0x400) (*dest[5] += ch[5].CalcL());
++	ISample v;
++	if (activech & 0x001) { v = ch[0].CalcL(); *dest[0]  = v; if (s_fm_scope_enabled) { s_fm_scope_buffer[0][s_fm_scope_write_pos[0] & OPNA_SCOPE_BUFFER_MASK] = fm_normalize_isample(v); s_fm_scope_write_pos[0]++; } }
++	if (activech & 0x004) { v = ch[1].CalcL(); *dest[1] += v; if (s_fm_scope_enabled) { s_fm_scope_buffer[1][s_fm_scope_write_pos[1] & OPNA_SCOPE_BUFFER_MASK] = fm_normalize_isample(v); s_fm_scope_write_pos[1]++; } }
++	if (activech & 0x010) { v = ch[2].CalcL(); *dest[2] += v; if (s_fm_scope_enabled) { s_fm_scope_buffer[2][s_fm_scope_write_pos[2] & OPNA_SCOPE_BUFFER_MASK] = fm_normalize_isample(v); s_fm_scope_write_pos[2]++; } }
++	if (activech & 0x040) { v = ch[3].CalcL(); *dest[3] += v; if (s_fm_scope_enabled) { s_fm_scope_buffer[3][s_fm_scope_write_pos[3] & OPNA_SCOPE_BUFFER_MASK] = fm_normalize_isample(v); s_fm_scope_write_pos[3]++; } }
++	if (activech & 0x100) { v = ch[4].CalcL(); *dest[4] += v; if (s_fm_scope_enabled) { s_fm_scope_buffer[4][s_fm_scope_write_pos[4] & OPNA_SCOPE_BUFFER_MASK] = fm_normalize_isample(v); s_fm_scope_write_pos[4]++; } }
++	if (activech & 0x400) { v = ch[5].CalcL(); *dest[5] += v; if (s_fm_scope_enabled) { s_fm_scope_buffer[5][s_fm_scope_write_pos[5] & OPNA_SCOPE_BUFFER_MASK] = fm_normalize_isample(v); s_fm_scope_write_pos[5]++; } }
+ }
+ 
+ inline void OPNABase::MixSubS(int activech, ISample** dest)
+ {
+-	if (activech & 0x001) (*dest[0]  = ch[0].Calc());
+-	if (activech & 0x004) (*dest[1] += ch[1].Calc());
+-	if (activech & 0x010) (*dest[2] += ch[2].Calc());
+-	if (activech & 0x040) (*dest[3] += ch[3].Calc());
+-	if (activech & 0x100) (*dest[4] += ch[4].Calc());
+-	if (activech & 0x400) (*dest[5] += ch[5].Calc());
++	ISample v;
++	if (activech & 0x001) { v = ch[0].Calc(); *dest[0]  = v; if (s_fm_scope_enabled) { s_fm_scope_buffer[0][s_fm_scope_write_pos[0] & OPNA_SCOPE_BUFFER_MASK] = fm_normalize_isample(v); s_fm_scope_write_pos[0]++; } }
++	if (activech & 0x004) { v = ch[1].Calc(); *dest[1] += v; if (s_fm_scope_enabled) { s_fm_scope_buffer[1][s_fm_scope_write_pos[1] & OPNA_SCOPE_BUFFER_MASK] = fm_normalize_isample(v); s_fm_scope_write_pos[1]++; } }
++	if (activech & 0x010) { v = ch[2].Calc(); *dest[2] += v; if (s_fm_scope_enabled) { s_fm_scope_buffer[2][s_fm_scope_write_pos[2] & OPNA_SCOPE_BUFFER_MASK] = fm_normalize_isample(v); s_fm_scope_write_pos[2]++; } }
++	if (activech & 0x040) { v = ch[3].Calc(); *dest[3] += v; if (s_fm_scope_enabled) { s_fm_scope_buffer[3][s_fm_scope_write_pos[3] & OPNA_SCOPE_BUFFER_MASK] = fm_normalize_isample(v); s_fm_scope_write_pos[3]++; } }
++	if (activech & 0x100) { v = ch[4].Calc(); *dest[4] += v; if (s_fm_scope_enabled) { s_fm_scope_buffer[4][s_fm_scope_write_pos[4] & OPNA_SCOPE_BUFFER_MASK] = fm_normalize_isample(v); s_fm_scope_write_pos[4]++; } }
++	if (activech & 0x400) { v = ch[5].Calc(); *dest[5] += v; if (s_fm_scope_enabled) { s_fm_scope_buffer[5][s_fm_scope_write_pos[5] & OPNA_SCOPE_BUFFER_MASK] = fm_normalize_isample(v); s_fm_scope_write_pos[5]++; } }
+ }
+ 
+ // ---------------------------------------------------------------------------
+--- a/src/fmgen/psg.h
++++ b/src/fmgen/psg.h
+@@ -11,6 +11,10 @@
+ 
+ #define PSG_SAMPLETYPE		int32		// int32 or int16
+ 
++#define PSG_SCOPE_BUFFER_SIZE  1024
++#define PSG_SCOPE_BUFFER_MASK  (PSG_SCOPE_BUFFER_SIZE - 1)
++#define PSG_SCOPE_NUM_CHANNELS 3
++
+ // ---------------------------------------------------------------------------
+ //	class PSG
+ //	PSG に良く似た音を生成する音源ユニット
+--- a/src/fmgen/psg.cpp
++++ b/src/fmgen/psg.cpp
+@@ -6,8 +6,20 @@
+ 
+ #include "headers.h"
+ #include "misc.h"
++#include <string.h>
+ #include "psg.h"
+ 
++
++// ---------------------------------------------------------------------------
++//	Per-channel scope capture (static globals)
++// ---------------------------------------------------------------------------
++
++static float s_ssg_scope_buffer[PSG_SCOPE_NUM_CHANNELS][PSG_SCOPE_BUFFER_SIZE];
++static uint32 s_ssg_scope_write_pos[PSG_SCOPE_NUM_CHANNELS];
++static int s_ssg_scope_enabled = 0;
++
++// PSG channel output max is roughly 0x4000/3 ~ 5461. Normalize to [-1,1].
++static const float PSG_SCOPE_NORM = 1.0f / 5500.0f;
+ // ---------------------------------------------------------------------------
+ //	コンストラクタ・デストラクタ
+ //
+@@ -218,6 +230,14 @@
+ //
+ void PSG::Mix(Sample* dest, int nsamples)
+ {
++	// Helper macro: capture a single SSG channel sample into its scope ring buffer
++#define PSG_SCOPE_CAPTURE(ch_idx, ch_val) \
++	if (s_ssg_scope_enabled) { \
++		s_ssg_scope_buffer[ch_idx][s_ssg_scope_write_pos[ch_idx] & PSG_SCOPE_BUFFER_MASK] = \
++			(float)(ch_val) * PSG_SCOPE_NORM; \
++		s_ssg_scope_write_pos[ch_idx]++; \
++	}
++
+ 	uint8 chenable[3], nenable[3];
+ 	uint8 r7 = ~reg[7];
+ 
+@@ -259,6 +279,9 @@
+ 						z = (SCOUNT(2) & chenable[2]) - 1;
+ 						sample += (olevel[2] + z) ^ z;
+ 						scount[2] += speriod[2];
++						PSG_SCOPE_CAPTURE(0, (int)((olevel[0] + x) ^ x))
++						PSG_SCOPE_CAPTURE(1, (int)((olevel[1] + y) ^ y))
++						PSG_SCOPE_CAPTURE(2, (int)((olevel[2] + z) ^ z))
+ 					}
+ 					sample /= (1 << oversampling);
+ 					StoreSample(dest[0], sample);
+@@ -293,6 +316,9 @@
+ 						z = ((SCOUNT(2) & chenable[2]) | (nenable[2] & noise)) - 1;
+ 						sample += (olevel[2] + z) ^ z;
+ 						scount[2] += speriod[2];
++						PSG_SCOPE_CAPTURE(0, (int)((olevel[0] + x) ^ x))
++						PSG_SCOPE_CAPTURE(1, (int)((olevel[1] + y) ^ y))
++						PSG_SCOPE_CAPTURE(2, (int)((olevel[2] + z) ^ z))
+ 					}
+ 					sample /= (1 << oversampling);
+ 					StoreSample(dest[0], sample);
+@@ -346,6 +372,9 @@
+ 					z = ((SCOUNT(2) & chenable[2]) | (nenable[2] & noise)) - 1;
+ 					sample += (*p3 + z) ^ z;
+ 					scount[2] += speriod[2];
++					PSG_SCOPE_CAPTURE(0, (int)((*p1 + x) ^ x))
++					PSG_SCOPE_CAPTURE(1, (int)((*p2 + y) ^ y))
++					PSG_SCOPE_CAPTURE(2, (int)((*p3 + z) ^ z))
+ 				}
+ 				sample /= (1 << oversampling);
+ 				StoreSample(dest[0], sample);
+@@ -354,6 +383,8 @@
+ 			}
+ 		}
+ 	}
++
++#undef PSG_SCOPE_CAPTURE
+ }
+ 
+ // ---------------------------------------------------------------------------
+@@ -362,3 +393,38 @@
+ uint	PSG::noisetable[noisetablesize] = { 0, };
+ int		PSG::EmitTable[0x20] = { -1, };
+ uint	PSG::enveloptable[16][64] = { 0, };
++
++// ---------------------------------------------------------------------------
++//	Scope capture accessor functions
++// ---------------------------------------------------------------------------
++
++extern "C" {
++
++void psg_scope_enable(int enable)
++{
++	s_ssg_scope_enabled = enable;
++	if (enable) {
++		memset(s_ssg_scope_buffer, 0, sizeof(s_ssg_scope_buffer));
++		memset(s_ssg_scope_write_pos, 0, sizeof(s_ssg_scope_write_pos));
++	}
++}
++
++unsigned int psg_scope_get_data(int channel, float *buffer, unsigned int num_samples)
++{
++	if (!buffer || !s_ssg_scope_enabled)
++		return 0;
++	if (channel < 0 || channel >= PSG_SCOPE_NUM_CHANNELS)
++		return 0;
++	if (num_samples > PSG_SCOPE_BUFFER_SIZE)
++		num_samples = PSG_SCOPE_BUFFER_SIZE;
++
++	unsigned int read_pos = (s_ssg_scope_write_pos[channel] - num_samples + PSG_SCOPE_BUFFER_SIZE)
++		& PSG_SCOPE_BUFFER_MASK;
++	for (unsigned int i = 0; i < num_samples; i++) {
++		buffer[i] = s_ssg_scope_buffer[channel][read_pos];
++		read_pos = (read_pos + 1) & PSG_SCOPE_BUFFER_MASK;
++	}
++	return num_samples;
++}
++
++} // extern "C"

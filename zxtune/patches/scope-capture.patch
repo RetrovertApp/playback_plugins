@@ -1,0 +1,136 @@
+--- a/src/devices/aym/src/psg.h
++++ b/src/devices/aym/src/psg.h
+@@ -12,9 +12,78 @@
+ 
+ #include "devices/aym/src/device.h"
+ #include "devices/aym/src/volume_table.h"
++#include <cstdint>
++#include <cstring>
+ 
+ #include <array>
+ 
++#define AYM_SCOPE_BUFFER_SIZE  1024
++#define AYM_SCOPE_BUFFER_MASK  (AYM_SCOPE_BUFFER_SIZE - 1)
++#define AYM_SCOPE_NUM_CHANNELS 3
++
++struct AymScopeState
++{
++  float    scope_buffer[AYM_SCOPE_NUM_CHANNELS][AYM_SCOPE_BUFFER_SIZE];
++  uint32_t scope_write_pos[AYM_SCOPE_NUM_CHANNELS];
++
++  AymScopeState()
++  {
++    Reset();
++  }
++
++  void Reset()
++  {
++    std::memset(scope_buffer, 0, sizeof(scope_buffer));
++    std::memset(scope_write_pos, 0, sizeof(scope_write_pos));
++  }
++};
++
++// Global scope state pointer used by PSG to capture per-channel data.
++// Set by the plugin before rendering, read by PSG::GetLevels().
++// Safe because only one chip renders at a time within a single plugin instance.
++inline AymScopeState* g_aym_scope_state = nullptr;
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/**
++ * Retrieve per-channel scope data from ring buffer.
++ *
++ * @param state       Scope state
++ * @param channel     Channel index (0-2)
++ * @param buffer      Output buffer for float samples
++ * @param num_samples Maximum number of samples to retrieve
++ * @return Number of samples written to buffer
++ */
++static inline uint32_t aym_scope_get_data(const AymScopeState* state, int channel,
++                                           float* buffer, uint32_t num_samples)
++{
++  if (!state || !buffer)
++    return 0;
++
++  if (channel < 0 || channel >= AYM_SCOPE_NUM_CHANNELS)
++    return 0;
++
++  if (num_samples > AYM_SCOPE_BUFFER_SIZE)
++    num_samples = AYM_SCOPE_BUFFER_SIZE;
++
++  uint32_t read_pos = (state->scope_write_pos[channel] - num_samples + AYM_SCOPE_BUFFER_SIZE)
++    & AYM_SCOPE_BUFFER_MASK;
++
++  for (uint32_t i = 0; i < num_samples; i++)
++  {
++    buffer[i] = state->scope_buffer[channel][read_pos];
++    read_pos = (read_pos + 1) & AYM_SCOPE_BUFFER_MASK;
++  }
++
++  return num_samples;
++}
++
++#ifdef __cplusplus
++}
++#endif
++
+ namespace Devices::AYM
+ {
+   class PSG
+@@ -118,9 +187,21 @@ namespace Devices::AYM
+       Device.Tick(ticks);
+     }
+ 
+-    Sound::Sample GetLevels() const
++    Sound::Sample GetLevels()
+     {
+-      return Table.Get(Device.GetLevels());
++      const uint_t levels = Device.GetLevels();
++      if (g_aym_scope_state)
++      {
++        const float chA = static_cast<float>(levels & HIGH_LEVEL_A) / 31.0f;
++        const float chB = static_cast<float>((levels >> BITS_PER_LEVEL) & HIGH_LEVEL_A) / 31.0f;
++        const float chC = static_cast<float>((levels >> (2 * BITS_PER_LEVEL)) & HIGH_LEVEL_A) / 31.0f;
++        AymScopeState* s = g_aym_scope_state;
++        s->scope_buffer[0][s->scope_write_pos[0] & AYM_SCOPE_BUFFER_MASK] = chA;
++        s->scope_buffer[1][s->scope_write_pos[1] & AYM_SCOPE_BUFFER_MASK] = chB;
++        s->scope_buffer[2][s->scope_write_pos[2] & AYM_SCOPE_BUFFER_MASK] = chC;
++        for (int i = 0; i < AYM_SCOPE_NUM_CHANNELS; ++i) s->scope_write_pos[i]++;
++      }
++      return Table.Get(levels);
+     }
+ 
+   private:
+--- a/src/devices/details/renderers.h
++++ b/src/devices/details/renderers.h
+@@ -137,7 +137,7 @@ namespace Devices::Details
+       Delegate.Tick(ticks);
+     }
+ 
+-    Sound::Sample GetLevels() const
++    Sound::Sample GetLevels()
+     {
+       return Delegate.GetLevels();
+     }
+@@ -162,7 +162,7 @@ namespace Devices::Details
+       Delegate.Tick(ticks);
+     }
+ 
+-    Sound::Sample GetLevels() const
++    Sound::Sample GetLevels()
+     {
+       const Sound::Sample curLevel = Delegate.GetLevels();
+       return Interpolate(curLevel);
+--- a/src/devices/aym/src/turbosound.cpp
++++ b/src/devices/aym/src/turbosound.cpp
+@@ -57,7 +57,7 @@ namespace Devices::TurboSound
+       Chip1.Tick(ticks);
+     }
+
+-    Sound::Sample GetLevels() const
++    Sound::Sample GetLevels()
+     {
+       using namespace Sound;
+       const Sample s0 = Chip0.GetLevels();

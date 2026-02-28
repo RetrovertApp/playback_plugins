@@ -1,0 +1,23 @@
+--- a/src/engine/engine.h
++++ b/src/engine/engine.h
+@@ -444,10 +444,7 @@
+   bool active;
+   bool lowQuality;
+   bool dcHiPass;
+-  bool playing;
+-  bool freelance;
+   bool shallStop, shallStopSched;
+-  bool endOfSong;
+   bool consoleMode;
+   bool disableStatusOut;
+   bool extValuePresent;
+@@ -677,6 +674,9 @@
+   friend class DivExportZSM;
+ 
+   public:
++    bool playing;
++    bool freelance;
++    bool endOfSong;
+     DivSong song;
+     DivOrders* curOrders;
+     DivChannelData* curPat;
