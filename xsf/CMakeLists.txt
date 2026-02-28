@@ -275,7 +275,6 @@ add_library(xsf_playback SHARED
     xsf_plugin.c
     xsf_psflib_bridge.c
     xsf_psf.c
-    xsf_psf_bios.c
     xsf_2sf.c
     xsf_usf.c
     xsf_ssf.c

@@ -32,7 +32,6 @@
 #include "xsf_2sf.h"
 #include "xsf_gsf.h"
 #include "xsf_psf.h"
-#include "xsf_psf_bios.h"
 #include "xsf_psflib_bridge.h"
 #include "xsf_qsf.h"
 #include "xsf_snsf.h"
@@ -820,26 +819,62 @@ static void xsf_plugin_event(void* user_data, uint8_t* event_data, uint64_t len)
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// BIOS data copy for highly_experimental (must remain valid for program lifetime)
+// BIOS data loaded from external file (must remain valid for program lifetime)
 static uint8_t* s_psx_bios_copy = nullptr;
+
+// Well-known BIOS filename. The host application must provide this file
+// alongside the plugin (or in a data directory accessible via the IO API).
+// The file is a pre-processed PS2 IOP BIOS created with the mkhebios tool
+// from the highly_experimental library.
+static const char* s_bios_search_paths[] = {
+    "psf_bios/scph10000_he.bin",
+    "bios/scph10000_he.bin",
+    "scph10000_he.bin",
+};
 
 static void xsf_plugin_static_init(const RVService* service_api) {
     g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    const RVIo* io = RVService_get_io(service_api, RV_IO_API_VERSION);
 
-    // Load embedded PSX BIOS and initialize HE library once (same pattern as zxtune)
-    uint32_t bios_size = 0;
-    const uint8_t* bios_data = xsf_psf_get_embedded_bios(&bios_size);
-    if (bios_data != nullptr && bios_size > 0) {
-        s_psx_bios_copy = (uint8_t*)malloc(bios_size);
-        if (s_psx_bios_copy != nullptr) {
-            memcpy(s_psx_bios_copy, bios_data, bios_size);
-            if (xsf_psf_init_bios(s_psx_bios_copy, bios_size) == 0) {
-                rv_info("PSX BIOS loaded and initialized (%u bytes)", bios_size);
-            } else {
-                rv_error("PSX BIOS loading failed");
+    if (io == nullptr) {
+        rv_error("PSF: IO API not available, PSF/PSF2 playback will be disabled");
+        return;
+    }
+
+    // Search for external BIOS file in well-known locations
+    RVIoReadUrlResult bios_result = {0};
+    const char* found_path = nullptr;
+
+    for (int i = 0; i < (int)(sizeof(s_bios_search_paths) / sizeof(s_bios_search_paths[0])); i++) {
+        if (RVIo_exists(io, s_bios_search_paths[i])) {
+            bios_result = RVIo_read_url_to_memory(io, s_bios_search_paths[i]);
+            if (bios_result.data != nullptr && bios_result.data_size > 0) {
+                found_path = s_bios_search_paths[i];
+                break;
             }
         }
     }
+
+    if (bios_result.data == nullptr || bios_result.data_size == 0) {
+        rv_info("PSF: No BIOS file found, PSF/PSF2 playback will be disabled. "
+                "Place scph10000_he.bin in psf_bios/ to enable it.");
+        return;
+    }
+
+    // Make a mutable copy (highly_experimental may modify BIOS data for endian swaps)
+    s_psx_bios_copy = (uint8_t*)malloc((size_t)bios_result.data_size);
+    if (s_psx_bios_copy != nullptr) {
+        memcpy(s_psx_bios_copy, bios_result.data, (size_t)bios_result.data_size);
+        if (xsf_psf_init_bios(s_psx_bios_copy, (uint32_t)bios_result.data_size) == 0) {
+            rv_info("PSF: BIOS loaded from '%s' (%u bytes)", found_path, (uint32_t)bios_result.data_size);
+        } else {
+            rv_error("PSF: BIOS validation failed for '%s'", found_path);
+            free(s_psx_bios_copy);
+            s_psx_bios_copy = nullptr;
+        }
+    }
+
+    RVIo_free_url_to_memory(io, bios_result.data);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
