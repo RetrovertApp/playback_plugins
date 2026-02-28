@@ -243,12 +243,12 @@ static RVReadInfo organya_plugin_read_data(void* user_data, RVReadData dest) {
     RVAudioFormat format = { RVAudioStreamFormat_F32, ORG_CHANNELS, ORG_SAMPLE_RATE };
 
     if (!data->song_loaded) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Error, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Error};
     }
 
     // Check if we've exceeded default duration (songs loop forever)
     if (data->elapsed_frames >= data->max_frames) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Finished};
     }
 
     uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(float) * ORG_CHANNELS);
@@ -276,7 +276,7 @@ static RVReadInfo organya_plugin_read_data(void* user_data, RVReadData dest) {
         status = RVReadStatus_Ok;
     }
 
-    return (RVReadInfo) { format, (uint32_t)generated, status, 0 };
+    return (RVReadInfo) { format, (uint32_t)generated, status};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

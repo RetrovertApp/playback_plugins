@@ -238,7 +238,7 @@ static RVReadInfo v2m_read_data(void* user_data, RVReadData dest) {
     RVAudioFormat format = { RVAudioStreamFormat_F32, V2M_CHANNELS, V2M_SAMPLE_RATE };
 
     if (!data->playing || !data->player->IsPlaying()) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Finished};
     }
 
     uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(float) * V2M_CHANNELS);
@@ -252,10 +252,10 @@ static RVReadInfo v2m_read_data(void* user_data, RVReadData dest) {
 
     if (!data->player->IsPlaying()) {
         data->playing = false;
-        return (RVReadInfo) { format, max_frames, RVReadStatus_Finished, 0 };
+        return (RVReadInfo) { format, max_frames, RVReadStatus_Finished};
     }
 
-    return (RVReadInfo) { format, max_frames, RVReadStatus_Ok, 0 };
+    return (RVReadInfo) { format, max_frames, RVReadStatus_Ok};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

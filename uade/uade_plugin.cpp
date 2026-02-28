@@ -290,7 +290,7 @@ static RVReadInfo uade_plugin_read_data(void* user_data, RVReadData dest) {
     RVReadStatus status = RVReadStatus_Ok;
 
     if (!data->state) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Error, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Error};
     }
 
     // Calculate how many S16 stereo frames fit in the output buffer
@@ -318,7 +318,7 @@ static RVReadInfo uade_plugin_read_data(void* user_data, RVReadData dest) {
     }
 
     uint32_t frames_read = (uint32_t)(bytes_read / 4);
-    return (RVReadInfo) { format, frames_read, status, 0 };
+    return (RVReadInfo) { format, frames_read, status};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

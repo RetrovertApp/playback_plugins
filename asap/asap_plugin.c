@@ -170,7 +170,7 @@ static RVReadInfo asap_read_data(void* user_data, RVReadData dest) {
     // Report actual channel count - host handles mono->stereo upmix
     RVAudioFormat format = { RVAudioStreamFormat_S16, (uint32_t)channels, OUTPUT_SAMPLE_RATE };
     RVReadStatus status = (frames_generated == 0) ? RVReadStatus_Finished : RVReadStatus_Ok;
-    return (RVReadInfo) { format, (uint16_t)frames_generated, status, 0 };
+    return (RVReadInfo) { format, (uint16_t)frames_generated, status};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

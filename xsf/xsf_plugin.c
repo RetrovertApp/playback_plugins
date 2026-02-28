@@ -578,7 +578,7 @@ static RVReadInfo xsf_plugin_read_data(void* user_data, RVReadData dest) {
 
     if (data->emu_state == nullptr || data->emulator == nullptr) {
         RVAudioFormat format = { RVAudioStreamFormat_S16, 2, 44100 };
-        return (RVReadInfo) { format, 0, RVReadStatus_Error, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Error};
     }
 
     // Report native format: S16 stereo at emulator's native sample rate
@@ -589,10 +589,10 @@ static RVReadInfo xsf_plugin_read_data(void* user_data, RVReadData dest) {
 
     int rendered = data->emulator->render(data->emu_state, (int16_t*)dest.channels_output, (int)max_frames);
     if (rendered <= 0) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Finished};
     }
 
-    return (RVReadInfo) { format, (uint32_t)rendered, RVReadStatus_Ok, 0 };
+    return (RVReadInfo) { format, (uint32_t)rendered, RVReadStatus_Ok};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

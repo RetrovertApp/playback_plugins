@@ -271,11 +271,11 @@ static RVReadInfo gme_plugin_read_data(void* user_data, RVReadData dest) {
     RVAudioFormat format = { RVAudioStreamFormat_S16, 2, OUTPUT_SAMPLE_RATE };
 
     if (data->emu == nullptr) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Error, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Error};
     }
 
     if (gme_track_ended(data->emu)) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Finished};
     }
 
     // Calculate how many S16 stereo frames fit in the output buffer
@@ -286,11 +286,11 @@ static RVReadInfo gme_plugin_read_data(void* user_data, RVReadData dest) {
     gme_err_t err = gme_play(data->emu, sample_count, (int16_t*)dest.channels_output);
     if (err != nullptr) {
         rv_error("GME playback error: %s", err);
-        return (RVReadInfo) { format, 0, RVReadStatus_Error, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Error};
     }
 
     RVReadStatus status = gme_track_ended(data->emu) ? RVReadStatus_Finished : RVReadStatus_Ok;
-    return (RVReadInfo) { format, (uint16_t)max_frames, status, 0 };
+    return (RVReadInfo) { format, (uint16_t)max_frames, status};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

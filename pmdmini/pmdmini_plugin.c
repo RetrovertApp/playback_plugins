@@ -181,12 +181,12 @@ static RVReadInfo pmdmini_plugin_read_data(void* user_data, RVReadData dest) {
     RVAudioFormat format = { RVAudioStreamFormat_S16, 2, PMD_SAMPLE_RATE };
 
     if (!data->file_open) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Error, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Error};
     }
 
     // Check if song ended (based on duration)
     if (data->length_sec > 0 && data->elapsed_frames / PMD_SAMPLE_RATE >= data->length_sec) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Finished};
     }
 
     // Calculate how many S16 stereo frames fit in the output buffer
@@ -203,7 +203,7 @@ static RVReadInfo pmdmini_plugin_read_data(void* user_data, RVReadData dest) {
         status = RVReadStatus_Finished;
     }
 
-    return (RVReadInfo) { format, (uint32_t)max_frames, status, 0 };
+    return (RVReadInfo) { format, (uint32_t)max_frames, status};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

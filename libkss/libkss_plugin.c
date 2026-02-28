@@ -239,13 +239,13 @@ static RVReadInfo libkss_plugin_read_data(void* user_data, RVReadData dest) {
     RVAudioFormat format = { RVAudioStreamFormat_S16, 2, OUTPUT_SAMPLE_RATE };
 
     if (data->kssplay == nullptr) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Error, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Error};
     }
 
     // Check if song ended (fade finished, silence detected, or max length reached)
     if (KSSPLAY_get_fade_flag(data->kssplay) == 2 || KSSPLAY_get_stop_flag(data->kssplay)
         || data->elapsed_frames >= data->max_frames) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Finished};
     }
 
     // Calculate how many S16 stereo frames fit in the output buffer
@@ -263,7 +263,7 @@ static RVReadInfo libkss_plugin_read_data(void* user_data, RVReadData dest) {
         status = RVReadStatus_Finished;
     }
 
-    return (RVReadInfo) { format, (uint32_t)max_frames, status, 0 };
+    return (RVReadInfo) { format, (uint32_t)max_frames, status};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

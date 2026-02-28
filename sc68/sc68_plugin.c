@@ -237,7 +237,7 @@ static RVReadInfo sc68_plugin_read_data(void* user_data, RVReadData dest) {
         status = RVReadStatus_Finished;
     }
 
-    return (RVReadInfo) { format, (uint16_t)samples_to_generate, status, 0 };
+    return (RVReadInfo) { format, (uint16_t)samples_to_generate, status};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

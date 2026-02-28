@@ -262,7 +262,7 @@ static RVReadInfo furnace_read_data(void* user_data, RVReadData dest) {
     RVAudioFormat format = { RVAudioStreamFormat_F32, FURNACE_CHANNELS, FURNACE_SAMPLE_RATE };
 
     if (!data->playing || !data->engine) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Finished};
     }
 
     uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(float) * FURNACE_CHANNELS);
@@ -286,10 +286,10 @@ static RVReadInfo furnace_read_data(void* user_data, RVReadData dest) {
     // Check end of song
     if (data->engine->endOfSong) {
         data->playing = false;
-        return (RVReadInfo) { format, frames_to_render, RVReadStatus_Finished, 0 };
+        return (RVReadInfo) { format, frames_to_render, RVReadStatus_Finished};
     }
 
-    return (RVReadInfo) { format, frames_to_render, RVReadStatus_Ok, 0 };
+    return (RVReadInfo) { format, frames_to_render, RVReadStatus_Ok};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

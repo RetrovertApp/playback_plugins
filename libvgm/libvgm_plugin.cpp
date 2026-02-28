@@ -456,7 +456,7 @@ static RVReadInfo libvgm_read_data(void* user_data, RVReadData dest) {
     LibvgmData* data = static_cast<LibvgmData*>(user_data);
 
     RVAudioFormat format = { RVAudioStreamFormat_F32, 2, SAMPLE_RATE };
-    RVReadInfo info = { format, 0, RVReadStatus_Ok, 0 };
+    RVReadInfo info = { format, 0, RVReadStatus_Ok };
 
     if (data->player == nullptr || data->dload == nullptr) {
         info.status = RVReadStatus_Error;

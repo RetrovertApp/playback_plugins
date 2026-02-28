@@ -283,12 +283,12 @@ static RVReadInfo fmplayer_plugin_read_data(void* user_data, RVReadData dest) {
     RVAudioFormat format = { RVAudioStreamFormat_S16, 2, OPNA_RATE };
 
     if (!data->file_open) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Error, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Error};
     }
 
     // Check song length limit or loop detection
     if (data->elapsed_frames >= data->max_frames || data->work.loop_cnt >= 2) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Finished};
     }
 
     // Calculate output frames at OPNA native rate
@@ -306,7 +306,7 @@ static RVReadInfo fmplayer_plugin_read_data(void* user_data, RVReadData dest) {
         status = RVReadStatus_Finished;
     }
 
-    return (RVReadInfo) { format, out_frames, status, 0 };
+    return (RVReadInfo) { format, out_frames, status};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

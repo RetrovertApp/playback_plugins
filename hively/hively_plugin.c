@@ -177,7 +177,7 @@ static RVReadInfo hively_read_data(void* user_data, RVReadData dest) {
 
     RVAudioFormat format = { RVAudioStreamFormat_S16, 2, FREQ };
     RVReadStatus status = (reached_end && frames_written == 0) ? RVReadStatus_Finished : RVReadStatus_Ok;
-    return (RVReadInfo) { format, (uint16_t)frames_written, status, 0 };
+    return (RVReadInfo) { format, (uint16_t)frames_written, status};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

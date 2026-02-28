@@ -264,11 +264,11 @@ static RVReadInfo eupmini_plugin_read_data(void* user_data, RVReadData dest) {
     RVAudioFormat format = { RVAudioStreamFormat_S16, 2, EUP_SAMPLE_RATE };
 
     if (!data->file_open || data->player == nullptr) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Error, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Error};
     }
 
     if (!data->player->isPlaying() || data->elapsed_frames >= data->max_frames) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Finished};
     }
 
     uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(int16_t) * 2);
@@ -308,7 +308,7 @@ static RVReadInfo eupmini_plugin_read_data(void* user_data, RVReadData dest) {
         status = RVReadStatus_Finished;
     }
 
-    return (RVReadInfo) { format, (uint32_t)read_count, status, 0 };
+    return (RVReadInfo) { format, (uint32_t)read_count, status};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -365,7 +365,7 @@ static void adplug_close(void* user_data) {
 static RVReadInfo adplug_read_data(void* user_data, RVReadData dest) {
     AdplugData* data = static_cast<AdplugData*>(user_data);
     RVAudioFormat format = { RVAudioStreamFormat_S16, 2, SAMPLE_RATE };
-    RVReadInfo info = { format, 0, RVReadStatus_Ok, 0 };
+    RVReadInfo info = { format, 0, RVReadStatus_Ok };
 
     if (data->player == nullptr || data->opl == nullptr) {
         info.status = RVReadStatus_Error;

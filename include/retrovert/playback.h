@@ -38,16 +38,6 @@ typedef enum RVReadStatus {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-typedef enum RVPlaybackType {
-    // Tracker-based playback type (i.e music based on pre-defined patterns)
-    RVPlaybackType_Tracker = 0,
-    // Hardware emulated means that a soundchip is being emulated and that frequencies, volumes, etc is being set.
-    RVPlaybackType_HardwareEmulated = 1,
-    // Streamed is usual for MP3/FLAC/etc formats
-    RVPlaybackType_Streamed = 2,
-} RVPlaybackType;
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // This struct contains info on what format the host expects as output.
 // If the decoder can match the output the host has to do less converting, but isn't required.
 // The `frame_count` parameter tells you how many frames can be written to the output buffer and read from the input
@@ -61,7 +51,6 @@ typedef struct RVReadInfo {
     RVAudioFormat format;
     uint32_t frame_count;
     RVReadStatus status;
-    uint16_t virtual_channel_count;
 } RVReadInfo;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -69,28 +58,10 @@ typedef struct RVReadInfo {
 typedef struct RVReadData {
     // Output for channel data. If there is more than one channel it's expected the data to be interleaved.
     void* channels_output;
-    // Output for virtual channels. This is mainly for data visualzation, but can also be used if the user
-    // wants to render out a song with all channels separated. This value is null and info.virtual_channel_count
-    // is zero when this data shouldn't be filled in. If the decoder doesn't support this virtual_chann_count should
-    // be set to zero when returing the read_info from [PlaybackPlugin::read_data]
-    void* virtual_channel_output;
     // Max number of bytes to write to the channels_output. Notice it's fine to write less as long as the correct amount
     uint32_t channels_output_max_bytes_size;
-    // Max number of bytes to write to the channels_output. Notice it's fine to write less as long as the correct amount
-    uint32_t virtual_channels_output_max_bytes_size;
     RVReadInfo info;
 } RVReadData;
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-typedef struct RVPlaybackInfo {
-    // These are the number of "virtual" channels used by the song. In tracker music these would be
-    // the total number of channels. If the format/plugin doesn't support retriving individual channels
-    // then this number should be set to zero
-    uint32_t virtual_channel_count;
-    // Playback type
-    RVPlaybackType playback_type;
-} RVPlaybackInfo;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Pattern data structures for tracker visualization

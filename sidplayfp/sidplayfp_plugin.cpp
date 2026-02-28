@@ -215,39 +215,28 @@ static RVReadInfo sidplayfp_read_data(void* user_data, RVReadData dest) {
     RVAudioFormat format = { RVAudioStreamFormat_S16, 2, FREQ };
 
     if (!data->tune) {
-        return RVReadInfo { format, 0, RVReadStatus_Error, 0 };
+        return RVReadInfo { format, 0, RVReadStatus_Error};
     }
 
-    // Calculate how many S16 stereo frames fit in the output buffer
-    uint32_t frames_needed = dest.channels_output_max_bytes_size / (sizeof(int16_t) * 2);
+    // Run emulator for one batch (play() caps at 20000 cycles internally)
+    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(int16_t) * 2);
+    unsigned int cycles = max_frames * 21; // ~20.5 cycles/sample
+    int samples = data->engine->play(cycles);
+
+    if (samples < 0) {
+        rv_error("sidplayfp playback error: %s", data->engine->error());
+        return RVReadInfo { format, 0, RVReadStatus_Error};
+    }
+
+    if (samples == 0) {
+        return RVReadInfo { format, 0, RVReadStatus_Finished};
+    }
+
+    // Mix S16 stereo directly to output buffer
     auto* output = static_cast<int16_t*>(dest.channels_output);
-    uint32_t frames_written = 0;
+    unsigned int mixed = data->engine->mix(output, static_cast<unsigned int>(samples));
 
-    // Generate and mix directly to output
-    while (frames_written < frames_needed) {
-        // PAL C64: 985248 Hz CPU, output at 48000 Hz = ~20.5 cycles/sample
-        unsigned int batch_frames = 1024;
-        if (batch_frames > frames_needed - frames_written) {
-            batch_frames = frames_needed - frames_written;
-        }
-        unsigned int cycles = batch_frames * 21;
-        int samples = data->engine->play(cycles);
-
-        if (samples < 0) {
-            rv_error("sidplayfp playback error: %s", data->engine->error());
-            return RVReadInfo { format, 0, RVReadStatus_Error, 0 };
-        }
-
-        if (samples == 0) {
-            break;
-        }
-
-        // Mix S16 stereo directly to output buffer at current write position
-        unsigned int mixed = data->engine->mix(&output[frames_written * 2], static_cast<unsigned int>(samples));
-        frames_written += mixed / 2;
-    }
-
-    return RVReadInfo { format, static_cast<uint16_t>(frames_written), RVReadStatus_Ok, 0 };
+    return RVReadInfo { format, static_cast<uint16_t>(mixed / 2), RVReadStatus_Ok};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

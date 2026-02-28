@@ -266,12 +266,12 @@ static RVReadInfo spu_plugin_read_data(void* user_data, RVReadData dest) {
     RVAudioFormat format = { RVAudioStreamFormat_S16, 1, data->sample_rate };
 
     if (data->adpcm_data == nullptr) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Error, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Error};
     }
 
     // Check if we've reached the end
     if (data->current_offset >= data->adpcm_size) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Finished};
     }
 
     uint32_t max_frames = dest.channels_output_max_bytes_size / sizeof(int16_t);
@@ -321,7 +321,7 @@ static RVReadInfo spu_plugin_read_data(void* user_data, RVReadData dest) {
         status = RVReadStatus_Ok;
     }
 
-    return (RVReadInfo) { format, frames_written, status, 0 };
+    return (RVReadInfo) { format, frames_written, status};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

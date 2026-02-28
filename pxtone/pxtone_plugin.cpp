@@ -282,7 +282,7 @@ static RVReadInfo pxtone_read_data(void* user_data, RVReadData dest) {
     RVAudioFormat format = { RVAudioStreamFormat_S16, PXTONE_CHANNELS, PXTONE_SAMPLE_RATE };
 
     if (data->finished || !data->pxtn->moo_is_valid_data()) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Finished};
     }
 
     uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(int16_t) * PXTONE_CHANNELS);
@@ -294,12 +294,12 @@ static RVReadInfo pxtone_read_data(void* user_data, RVReadData dest) {
     if (!moo_ok || data->pxtn->moo_is_end_vomit()) {
         data->finished = true;
         if (!moo_ok) {
-            return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
+            return (RVReadInfo) { format, 0, RVReadStatus_Finished};
         }
     }
 
     RVReadStatus status = data->finished ? RVReadStatus_Finished : RVReadStatus_Ok;
-    return (RVReadInfo) { format, max_frames, status, 0 };
+    return (RVReadInfo) { format, max_frames, status};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

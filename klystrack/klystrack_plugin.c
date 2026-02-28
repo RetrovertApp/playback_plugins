@@ -182,7 +182,7 @@ static RVReadInfo klystrack_read_data(void* user_data, RVReadData dest) {
     RVAudioFormat format = { RVAudioStreamFormat_S16, KT_CHANNELS, KT_SAMPLE_RATE };
 
     if (data->song == nullptr || data->finished) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Finished};
     }
 
     uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(int16_t) * KT_CHANNELS);
@@ -201,7 +201,7 @@ static RVReadInfo klystrack_read_data(void* user_data, RVReadData dest) {
     data->elapsed_frames += (int)max_frames;
 
     RVReadStatus status = data->finished ? RVReadStatus_Finished : RVReadStatus_Ok;
-    return (RVReadInfo) { format, max_frames, status, 0 };
+    return (RVReadInfo) { format, max_frames, status};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

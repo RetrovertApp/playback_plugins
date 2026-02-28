@@ -318,7 +318,7 @@ static RVReadInfo audio_stream_read_data(void* user_data, RVReadData dest) {
 
     RVAudioFormat format = { RVAudioStreamFormat_F32, (uint8_t)decoder->channels, decoder->sample_rate };
 
-    return (RVReadInfo) { format, (uint32_t)frames_read, status, 0 };
+    return (RVReadInfo) { format, (uint32_t)frames_read, status};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

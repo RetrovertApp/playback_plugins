@@ -311,7 +311,7 @@ static RVReadInfo zxtune_read_data(void* user_data, RVReadData dest) {
     RVAudioFormat format = { RVAudioStreamFormat_S16, 2, FREQ };
 
     if (!data->renderer) {
-        return RVReadInfo { format, 0, RVReadStatus_Error, 0 };
+        return RVReadInfo { format, 0, RVReadStatus_Error};
     }
 
     auto* output = static_cast<int16_t*>(dest.channels_output);
@@ -326,7 +326,7 @@ static RVReadInfo zxtune_read_data(void* user_data, RVReadData dest) {
 
             if (data->chunk.empty()) {
                 if (frames_written == 0) {
-                    return RVReadInfo { format, 0, RVReadStatus_Finished, 0 };
+                    return RVReadInfo { format, 0, RVReadStatus_Finished};
                 }
                 break;
             }
@@ -347,7 +347,7 @@ static RVReadInfo zxtune_read_data(void* user_data, RVReadData dest) {
         frames_written += static_cast<uint32_t>(frames_to_copy);
     }
 
-    return RVReadInfo { format, static_cast<uint16_t>(frames_written), RVReadStatus_Ok, 0 };
+    return RVReadInfo { format, static_cast<uint16_t>(frames_written), RVReadStatus_Ok};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

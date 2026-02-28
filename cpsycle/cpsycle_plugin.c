@@ -303,11 +303,11 @@ static RVReadInfo cpsycle_plugin_read_data(void* user_data, RVReadData dest) {
     RVAudioFormat format = { RVAudioStreamFormat_F32, 2, OUTPUT_SAMPLE_RATE };
 
     if (!data->initialized || data->song == nullptr) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Error, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Error};
     }
 
     if (data->song_ended) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Finished};
     }
 
     // Calculate how many frames we can generate
@@ -325,7 +325,7 @@ static RVReadInfo cpsycle_plugin_read_data(void* user_data, RVReadData dest) {
 
     if (rendered == nullptr || numsamples <= 0) {
         data->song_ended = 1;
-        return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Finished};
     }
 
     // Copy rendered audio to output buffer and normalize from native range [-32768, 32768] to [-1, 1]
@@ -339,10 +339,10 @@ static RVReadInfo cpsycle_plugin_read_data(void* user_data, RVReadData dest) {
 
     if (!hostisplaying) {
         data->song_ended = 1;
-        return (RVReadInfo) { format, (uint32_t)numsamples, RVReadStatus_Finished, 0 };
+        return (RVReadInfo) { format, (uint32_t)numsamples, RVReadStatus_Finished};
     }
 
-    return (RVReadInfo) { format, (uint32_t)numsamples, RVReadStatus_Ok, 0 };
+    return (RVReadInfo) { format, (uint32_t)numsamples, RVReadStatus_Ok};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

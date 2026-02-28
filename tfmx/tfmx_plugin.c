@@ -181,7 +181,7 @@ static RVReadInfo tfmx_read_data(void* user_data, RVReadData dest) {
     RVAudioFormat format = { RVAudioStreamFormat_S16, CHANNELS, SAMPLE_RATE };
     RVReadStatus status = song_end ? RVReadStatus_Finished : RVReadStatus_Ok;
 
-    return (RVReadInfo) { format, (uint16_t)max_frames, status, 0 };
+    return (RVReadInfo) { format, (uint16_t)max_frames, status};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

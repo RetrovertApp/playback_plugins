@@ -213,12 +213,12 @@ static RVReadInfo sunvox_plugin_read_data(void* user_data, RVReadData dest) {
     RVAudioFormat format = { RVAudioStreamFormat_F32, 2, OUTPUT_SAMPLE_RATE };
 
     if (!data->playing || !g_sunvox_initialized) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Error, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Error};
     }
 
     // Check if song ended
     if (sv_end_of_song(SUNVOX_SLOT)) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Finished};
     }
 
     uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(float) * 2);
@@ -232,7 +232,7 @@ static RVReadInfo sunvox_plugin_read_data(void* user_data, RVReadData dest) {
     }
 
     if (max_frames == 0) {
-        return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
+        return (RVReadInfo) { format, 0, RVReadStatus_Finished};
     }
 
     // sv_audio_callback outputs F32 stereo interleaved when initialized with AUDIO_FLOAT32
@@ -250,7 +250,7 @@ static RVReadInfo sunvox_plugin_read_data(void* user_data, RVReadData dest) {
     // sv_audio_callback returns 0 if buffer is silent (could mean no modules or end)
     (void)result;
 
-    return (RVReadInfo) { format, max_frames, status, 0 };
+    return (RVReadInfo) { format, max_frames, status};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
