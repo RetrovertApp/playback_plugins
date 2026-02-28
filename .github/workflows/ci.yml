@@ -92,7 +92,8 @@ jobs:
         count=$(ls build/plugins/*_playback.dll 2>/dev/null | wc -l)
         echo "Built $count plugins"
         ls build/plugins/*_playback.dll
-        if [ "$count" -lt 26 ]; then
-          echo "Expected 26 plugins, got $count"
+        # UADE is Unix-only (requires POSIX APIs), so Windows builds 25 plugins
+        if [ "$count" -lt 25 ]; then
+          echo "Expected 25 plugins, got $count"
           exit 1
         fi
