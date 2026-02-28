@@ -1,0 +1,3 @@
+# Patch files must keep LF line endings on all platforms.
+# git apply fails with "corrupt patch" if patches have CRLF.
+*.patch text eol=lf

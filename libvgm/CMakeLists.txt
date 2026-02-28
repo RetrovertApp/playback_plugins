@@ -218,6 +218,7 @@ target_link_libraries(libvgm_playback PRIVATE
 
 if(TARGET vgm_pattern)
     target_link_libraries(libvgm_playback PRIVATE vgm_pattern)
+    target_compile_definitions(libvgm_playback PRIVATE HAS_VGM_PATTERN)
 endif()
 
 if(NOT WIN32)

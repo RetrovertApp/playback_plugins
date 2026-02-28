@@ -154,7 +154,7 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|AMD64")
 endif()
 target_link_libraries(usf_static PRIVATE ZLIB::ZLIB)
 suppress_external_warnings(usf_static)
-target_compile_options(usf_static PRIVATE -Wno-error=return-mismatch -Wno-error=implicit-function-declaration -fvisibility=hidden)
+target_compile_options(usf_static PRIVATE -Wno-error=return-mismatch -Wno-error=implicit-function-declaration -Wno-error=return-type -fvisibility=hidden)
 set_target_properties(usf_static PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # =====================================================================================

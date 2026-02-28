@@ -26,12 +26,14 @@
 #include "utils/DataLoader.h"
 #include "utils/MemoryLoader.h"
 
-// VGM pattern extraction (pure C)
+// VGM pattern extraction (pure C) - only available when built with host's arena library
+#ifdef HAS_VGM_PATTERN
 extern "C" {
 #include "src/vgm_parser.h"
 #include "src/vgm_quantize.h"
 #include "src/vgm_timeline.h"
 }
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Debug flag - must be defined before use
@@ -67,10 +69,12 @@ struct LibvgmData {
     uint8_t vu_left;
     uint8_t vu_right;
 
+#ifdef HAS_VGM_PATTERN
     // VGM pattern extraction
     RpArena* pattern_arena;
     VgmPattern* pattern;
     uint32_t current_sample; // Tracks current playback position in samples
+#endif
 
     // Scope visualization state
     bool scope_enabled;
@@ -209,8 +213,10 @@ static void* libvgm_create(const RVService* service_api) {
     data->player->SetFadeSamples(SAMPLE_RATE * 3);       // 3 second fade out
     data->player->SetEndSilenceSamples(SAMPLE_RATE / 2); // 0.5 second silence at end
 
+#ifdef HAS_VGM_PATTERN
     // Create arena for pattern extraction (1MB should be plenty)
     data->pattern_arena = vgm_arena_create(16 * 1024 * 1024);
+#endif
 
     return data;
 }
@@ -244,9 +250,11 @@ static int libvgm_destroy(void* user_data) {
         data->file_data = nullptr;
     }
 
+#ifdef HAS_VGM_PATTERN
     // Clean up pattern extraction arena
     vgm_arena_destroy(data->pattern_arena);
     data->pattern_arena = nullptr;
+#endif
 
     free(data);
     return 0;
@@ -317,6 +325,7 @@ static int libvgm_open(void* user_data, const char* url, uint32_t subsong, const
         return -1;
     }
 
+#ifdef HAS_VGM_PATTERN
     // Extract VGM pattern data for visualization (VGM/VGZ files only)
     data->pattern = nullptr;
     data->current_sample = 0;
@@ -375,6 +384,7 @@ static int libvgm_open(void* user_data, const char* url, uint32_t subsong, const
             rv_debug("libvgm: Not a VGM file (no magic header)");
         }
     }
+#endif
 
     // Configure YM2612 to use Gens core for scope capture support
     // The Gens core is the only one with per-channel audio capture implemented
@@ -431,9 +441,11 @@ static void libvgm_close(void* user_data) {
         data->file_data = nullptr;
     }
 
+#ifdef HAS_VGM_PATTERN
     // Clear pattern data (arena memory will be reused on next open)
     data->pattern = nullptr;
     data->current_sample = 0;
+#endif
     data->vu_left = 0;
     data->vu_right = 0;
 }
@@ -659,6 +671,7 @@ static void libvgm_event(void* user_data, uint8_t* event_data, uint64_t len) {
     event_data[2] = 0;
     event_data[3] = 0;
 
+#ifdef HAS_VGM_PATTERN
     // Report current row based on playback position
     // Note: With per-channel scrolling, this legacy row value is only used for
     // compatibility. The real per-channel positions are handled via get_tracker_info().
@@ -680,7 +693,9 @@ static void libvgm_event(void* user_data, uint8_t* event_data, uint64_t len) {
         event_data[5] = static_cast<uint8_t>((current_row >> 8) & 0xFF); // High byte
         event_data[6] = static_cast<uint8_t>(current_row & 0xFF);        // Low byte
         event_data[7] = 0;                                               // Pattern number (VGM only has one pattern)
-    } else {
+    } else
+#endif
+    {
         event_data[5] = 0;
         event_data[6] = 0;
         event_data[7] = 0;
@@ -742,6 +757,7 @@ static int libvgm_get_tracker_info(void* user_data, RVTrackerInfo* info) {
         }
     }
 
+#ifdef HAS_VGM_PATTERN
     if (data->pattern != nullptr) {
         info->num_channels = static_cast<uint8_t>(data->pattern->channel_count);
         info->num_patterns = 1;          // VGM has one "pattern" (the entire file)
@@ -787,6 +803,7 @@ static int libvgm_get_tracker_info(void* user_data, RVTrackerInfo* info) {
 
         return 0;
     }
+#endif
 
     return -1; // No pattern data available
 }
@@ -795,13 +812,20 @@ static int libvgm_get_tracker_info(void* user_data, RVTrackerInfo* info) {
 
 static int libvgm_get_pattern_cell(void* user_data, int pattern, int row, int channel, RVPatternCell* cell) {
     (void)pattern; // VGM only has one "pattern"
+    (void)row;
+    (void)channel;
     LibvgmData* data = static_cast<LibvgmData*>(user_data);
 
-    if (data == nullptr || cell == nullptr || data->pattern == nullptr) {
+    if (data == nullptr || cell == nullptr) {
         return -1;
     }
 
     memset(cell, 0, sizeof(RVPatternCell));
+
+#ifdef HAS_VGM_PATTERN
+    if (data->pattern == nullptr) {
+        return -1;
+    }
 
     if (channel < 0 || static_cast<uint32_t>(channel) >= data->pattern->channel_count) {
         return -1;
@@ -845,6 +869,9 @@ static int libvgm_get_pattern_cell(void* user_data, int pattern, int row, int ch
     }
 
     return 0;
+#else
+    return -1;
+#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -853,7 +880,12 @@ static int libvgm_get_pattern_num_rows(void* user_data, int pattern) {
     (void)pattern; // VGM only has one "pattern"
     LibvgmData* data = static_cast<LibvgmData*>(user_data);
 
-    if (data == nullptr || data->pattern == nullptr) {
+    if (data == nullptr) {
+        return 0;
+    }
+
+#ifdef HAS_VGM_PATTERN
+    if (data->pattern == nullptr) {
         return 0;
     }
 
@@ -865,6 +897,9 @@ static int libvgm_get_pattern_num_rows(void* user_data, int pattern) {
         }
     }
     return static_cast<int>(max_rows);
+#else
+    return 0;
+#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
