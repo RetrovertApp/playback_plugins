@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-linux:
+    name: Linux
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y clang ninja-build zlib1g-dev
+
+    - name: Configure
+      run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+
+    - name: Build
+      run: cmake --build build
+
+    - name: Verify all plugins built
+      run: |
+        count=$(ls build/plugins/*_playback.so 2>/dev/null | wc -l)
+        echo "Built $count plugins"
+        ls build/plugins/*_playback.so
+        if [ "$count" -lt 26 ]; then
+          echo "Expected 26 plugins, got $count"
+          exit 1
+        fi
+
+  build-macos:
+    name: macOS
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: brew install ninja
+
+    - name: Configure
+      run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+
+    - name: Build
+      run: cmake --build build
+
+    - name: Verify all plugins built
+      run: |
+        count=$(ls build/plugins/*_playback.so 2>/dev/null | wc -l)
+        echo "Built $count plugins"
+        ls build/plugins/*_playback.so
+        if [ "$count" -lt 26 ]; then
+          echo "Expected 26 plugins, got $count"
+          exit 1
+        fi
+
+  build-windows:
+    name: Windows
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup VS environment
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
+    - name: Install dependencies
+      run: |
+        choco install ninja -y
+        vcpkg install zlib:x64-windows
+
+    - name: Configure
+      run: >
+        cmake -B build -G Ninja
+        -DCMAKE_BUILD_TYPE=Debug
+        -DCMAKE_C_COMPILER=clang-cl
+        -DCMAKE_CXX_COMPILER=clang-cl
+        -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
+
+    - name: Build
+      run: cmake --build build
+
+    - name: Verify all plugins built
+      shell: bash
+      run: |
+        count=$(ls build/plugins/*_playback.dll 2>/dev/null | wc -l)
+        echo "Built $count plugins"
+        ls build/plugins/*_playback.dll
+        if [ "$count" -lt 26 ]; then
+          echo "Expected 26 plugins, got $count"
+          exit 1
+        fi
