@@ -37,7 +37,6 @@ struct pcm_struct pcm;
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #define EUP_SAMPLE_RATE 44100
-#define EUP_BUFFER_SIZE 4096
 #define EUP_HEADER_SIZE 2048
 // Default song length: 5 minutes (Euphony files don't embed duration)
 #define DEFAULT_LENGTH_MS (5 * 60 * 1000)
@@ -262,8 +261,7 @@ static RVProbeResult eupmini_plugin_probe_can_play(uint8_t* probe_data, uint64_t
 
 static RVReadInfo eupmini_plugin_read_data(void* user_data, RVReadData dest) {
     auto* data = (EupminiReplayerData*)user_data;
-
-    RVAudioFormat format = { RVAudioStreamFormat_F32, 2, EUP_SAMPLE_RATE };
+    RVAudioFormat format = { RVAudioStreamFormat_S16, 2, EUP_SAMPLE_RATE };
 
     if (!data->file_open || data->player == nullptr) {
         return (RVReadInfo) { format, 0, RVReadStatus_Error, 0 };
@@ -273,10 +271,7 @@ static RVReadInfo eupmini_plugin_read_data(void* user_data, RVReadData dest) {
         return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
     }
 
-    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(float) * 2);
-    if (max_frames > EUP_BUFFER_SIZE) {
-        max_frames = EUP_BUFFER_SIZE;
-    }
+    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(int16_t) * 2);
 
     // Generate audio by calling nextTick until we have enough samples
     while (data->player->isPlaying()) {
@@ -292,7 +287,7 @@ static RVReadInfo eupmini_plugin_read_data(void* user_data, RVReadData dest) {
 
     fflush(data->mem_stream);
 
-    // Read S16 samples from temp file and convert to F32
+    // Read S16 samples from temp file
     long write_pos = ftell(data->mem_stream);
     size_t available_bytes = (size_t)(write_pos - data->mem_read_pos);
     size_t available_frames = available_bytes / (sizeof(int16_t) * 2);
@@ -300,28 +295,20 @@ static RVReadInfo eupmini_plugin_read_data(void* user_data, RVReadData dest) {
         available_frames = max_frames;
     }
 
-    // Seek to read position, read S16 data, then seek back to end for writes
-    int16_t temp_s16[EUP_BUFFER_SIZE * 2];
+    // Seek to read position, read S16 data directly to output, then seek back to end for writes
     fseek(data->mem_stream, data->mem_read_pos, SEEK_SET);
-    size_t read_count = fread(temp_s16, sizeof(int16_t) * 2, available_frames, data->mem_stream);
+    size_t read_count = fread(dest.channels_output, sizeof(int16_t) * 2, available_frames, data->mem_stream);
     fseek(data->mem_stream, 0, SEEK_END);
-
-    float* output = (float*)dest.channels_output;
-    for (size_t i = 0; i < read_count * 2; i++) {
-        output[i] = (float)temp_s16[i] / 32768.0f;
-    }
 
     data->mem_read_pos += (long)(read_count * sizeof(int16_t) * 2);
     data->elapsed_frames += (int)read_count;
-
-    uint32_t frames_written = (uint32_t)read_count;
 
     RVReadStatus status = RVReadStatus_Ok;
     if (!data->player->isPlaying() || data->elapsed_frames >= data->max_frames) {
         status = RVReadStatus_Finished;
     }
 
-    return (RVReadInfo) { format, frames_written, status, 0 };
+    return (RVReadInfo) { format, (uint32_t)read_count, status, 0 };
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

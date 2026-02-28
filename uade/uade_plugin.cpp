@@ -29,7 +29,6 @@ unsigned int audio_scope_get_data(int channel, float* buffer, unsigned int num_s
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #define OUTPUT_SAMPLE_RATE 48000
-#define FRAME_SIZE 1024
 
 const RVLog* g_rv_log = nullptr;
 
@@ -287,24 +286,18 @@ static RVProbeResult uade_plugin_probe_can_play(uint8_t* file_data, uint64_t dat
 
 static RVReadInfo uade_plugin_read_data(void* user_data, RVReadData dest) {
     UadeReplayerData* data = (UadeReplayerData*)user_data;
-
+    RVAudioFormat format = { RVAudioStreamFormat_S16, 2, OUTPUT_SAMPLE_RATE };
     RVReadStatus status = RVReadStatus_Ok;
 
     if (!data->state) {
-        RVAudioFormat format = { RVAudioStreamFormat_F32, 2, OUTPUT_SAMPLE_RATE };
         return (RVReadInfo) { format, 0, RVReadStatus_Error, 0 };
     }
 
-    // Calculate how many frames we can generate (stereo F32 = 8 bytes per frame)
-    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(float) * 2);
-    if (max_frames > FRAME_SIZE) {
-        max_frames = FRAME_SIZE;
-    }
+    // Calculate how many S16 stereo frames fit in the output buffer
+    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(int16_t) * 2);
 
-    // UADE produces stereo S16 samples in big-endian format (4 bytes per frame)
-    // We need a temporary buffer to read into, then convert to F32
-    int16_t temp_buffer[FRAME_SIZE * 2];
-    ssize_t bytes_read = uade_read(temp_buffer, max_frames * 4, data->state);
+    // UADE produces stereo S16 samples directly to output buffer (4 bytes per frame)
+    ssize_t bytes_read = uade_read(static_cast<int16_t*>(dest.channels_output), max_frames * 4, data->state);
 
     if (bytes_read < 0) {
         status = RVReadStatus_Error;
@@ -325,14 +318,6 @@ static RVReadInfo uade_plugin_read_data(void* user_data, RVReadData dest) {
     }
 
     uint32_t frames_read = (uint32_t)(bytes_read / 4);
-
-    // Convert S16 to F32
-    float* output = (float*)dest.channels_output;
-    for (uint32_t i = 0; i < frames_read * 2; i++) {
-        output[i] = (float)temp_buffer[i] / 32768.0f;
-    }
-
-    RVAudioFormat format = { RVAudioStreamFormat_F32, 2, OUTPUT_SAMPLE_RATE };
     return (RVReadInfo) { format, frames_read, status, 0 };
 }
 

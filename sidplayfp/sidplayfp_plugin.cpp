@@ -25,33 +25,18 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #define FREQ 48000
-#define MAX_BUFFER_SIZE 8192
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static const RVIo* g_io_api = nullptr;
 static const RVLog* g_rv_log = nullptr;
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// Ring buffer size - enough for several frames of audio
-#define RING_BUFFER_SIZE (48000 / 10) // ~100ms of audio at 48kHz
-
 struct SidPlayData {
     sidplayfp* engine;
     SidTune* tune;
     ReSIDfpBuilder* builder;
-    short* mix_buffer;
-    int mix_buffer_size;
     uint8_t* song_data;
     uint32_t song_data_size;
-
-    // Ring buffer for smoothing sample delivery
-    float* ring_buffer;      // Stereo interleaved F32 samples
-    uint32_t ring_write_pos; // Write position (in frames)
-    uint32_t ring_read_pos;  // Read position (in frames)
-    uint32_t ring_frames;    // Number of frames currently in buffer
-
     bool scope_enabled;
     int sid_count; // Number of SID chips used by current tune (1-3)
 };
@@ -81,15 +66,6 @@ static void* sidplayfp_create(const RVService* service_api) {
         rv_error("Failed to create SID builder: %s", data->builder->error());
     }
 
-    data->mix_buffer = new short[MAX_BUFFER_SIZE * 2];
-    data->mix_buffer_size = MAX_BUFFER_SIZE;
-
-    // Allocate ring buffer for smoothing (stereo F32)
-    data->ring_buffer = new float[RING_BUFFER_SIZE * 2];
-    data->ring_write_pos = 0;
-    data->ring_read_pos = 0;
-    data->ring_frames = 0;
-
     return data;
 }
 
@@ -98,8 +74,6 @@ static void* sidplayfp_create(const RVService* service_api) {
 static int sidplayfp_destroy(void* user_data) {
     SidPlayData* data = static_cast<SidPlayData*>(user_data);
 
-    delete[] data->mix_buffer;
-    delete[] data->ring_buffer;
     delete[] data->song_data;
     delete data->tune;
     delete data->builder;
@@ -195,11 +169,6 @@ static int sidplayfp_open(void* user_data, const char* url, uint32_t subsong, co
     if (data->sid_count > 3)
         data->sid_count = 3;
 
-    // Reset ring buffer for new playback
-    data->ring_write_pos = 0;
-    data->ring_read_pos = 0;
-    data->ring_frames = 0;
-
     return 0;
 }
 
@@ -243,71 +212,42 @@ static RVProbeResult sidplayfp_probe_can_play(uint8_t* probe_data, uint64_t data
 
 static RVReadInfo sidplayfp_read_data(void* user_data, RVReadData dest) {
     SidPlayData* data = static_cast<SidPlayData*>(user_data);
+    RVAudioFormat format = { RVAudioStreamFormat_S16, 2, FREQ };
 
     if (!data->tune) {
-        return RVReadInfo { { RVAudioStreamFormat_F32, 2, FREQ }, 0, RVReadStatus_Error, 0 };
+        return RVReadInfo { format, 0, RVReadStatus_Error, 0 };
     }
 
-    // Calculate how many frames the host wants
-    uint32_t frames_needed = dest.channels_output_max_bytes_size / (sizeof(float) * 2);
-    float* output = static_cast<float*>(dest.channels_output);
+    // Calculate how many S16 stereo frames fit in the output buffer
+    uint32_t frames_needed = dest.channels_output_max_bytes_size / (sizeof(int16_t) * 2);
+    auto* output = static_cast<int16_t*>(dest.channels_output);
+    uint32_t frames_written = 0;
 
-    // Fill ring buffer until we have enough frames
-    while (data->ring_frames < frames_needed) {
-        // Generate a batch of samples
+    // Generate and mix directly to output
+    while (frames_written < frames_needed) {
         // PAL C64: 985248 Hz CPU, output at 48000 Hz = ~20.5 cycles/sample
-        // Generate ~1024 frames worth at a time
         unsigned int batch_frames = 1024;
+        if (batch_frames > frames_needed - frames_written) {
+            batch_frames = frames_needed - frames_written;
+        }
         unsigned int cycles = batch_frames * 21;
         int samples = data->engine->play(cycles);
 
         if (samples < 0) {
             rv_error("sidplayfp playback error: %s", data->engine->error());
-            return RVReadInfo { { RVAudioStreamFormat_F32, 2, FREQ }, 0, RVReadStatus_Error, 0 };
+            return RVReadInfo { format, 0, RVReadStatus_Error, 0 };
         }
 
         if (samples == 0) {
-            // No more samples - return what we have
             break;
         }
 
-        // Mix to S16 buffer
-        unsigned int mixed = data->engine->mix(data->mix_buffer, static_cast<unsigned int>(samples));
-        uint32_t frames_generated = mixed / 2;
-
-        // Convert S16 to F32 and write to ring buffer
-        for (uint32_t i = 0; i < frames_generated; i++) {
-            if (data->ring_frames >= RING_BUFFER_SIZE) {
-                // Ring buffer full - shouldn't happen with reasonable request sizes
-                break;
-            }
-
-            uint32_t write_idx = data->ring_write_pos * 2;
-            data->ring_buffer[write_idx] = static_cast<float>(data->mix_buffer[i * 2]) / 32768.0f;
-            data->ring_buffer[write_idx + 1] = static_cast<float>(data->mix_buffer[i * 2 + 1]) / 32768.0f;
-
-            data->ring_write_pos = (data->ring_write_pos + 1) % RING_BUFFER_SIZE;
-            data->ring_frames++;
-        }
+        // Mix S16 stereo directly to output buffer at current write position
+        unsigned int mixed = data->engine->mix(&output[frames_written * 2], static_cast<unsigned int>(samples));
+        frames_written += mixed / 2;
     }
 
-    // Copy frames from ring buffer to output
-    uint32_t frames_to_output = frames_needed;
-    if (frames_to_output > data->ring_frames) {
-        frames_to_output = data->ring_frames;
-    }
-
-    for (uint32_t i = 0; i < frames_to_output; i++) {
-        uint32_t read_idx = data->ring_read_pos * 2;
-        output[i * 2] = data->ring_buffer[read_idx];
-        output[i * 2 + 1] = data->ring_buffer[read_idx + 1];
-
-        data->ring_read_pos = (data->ring_read_pos + 1) % RING_BUFFER_SIZE;
-        data->ring_frames--;
-    }
-
-    RVAudioFormat format = { RVAudioStreamFormat_F32, 2, FREQ };
-    return RVReadInfo { format, static_cast<uint16_t>(frames_to_output), RVReadStatus_Ok, 0 };
+    return RVReadInfo { format, static_cast<uint16_t>(frames_written), RVReadStatus_Ok, 0 };
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

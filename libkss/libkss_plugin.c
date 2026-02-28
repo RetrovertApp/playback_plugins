@@ -33,7 +33,6 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #define OUTPUT_SAMPLE_RATE 48000
-#define BUFFER_SIZE 4096
 // Default song length when duration is unknown (3 minutes)
 #define DEFAULT_LENGTH_MS (3 * 60 * 1000)
 // Fade out duration in ms
@@ -50,7 +49,6 @@ typedef struct LibkssReplayerData {
     int current_track;
     int elapsed_frames;
     int max_frames;
-    int16_t temp_buffer[BUFFER_SIZE * 2]; // Stereo S16 buffer
 } LibkssReplayerData;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -238,8 +236,7 @@ static RVProbeResult libkss_plugin_probe_can_play(uint8_t* probe_data, uint64_t 
 
 static RVReadInfo libkss_plugin_read_data(void* user_data, RVReadData dest) {
     LibkssReplayerData* data = (LibkssReplayerData*)user_data;
-
-    RVAudioFormat format = { RVAudioStreamFormat_F32, 2, OUTPUT_SAMPLE_RATE };
+    RVAudioFormat format = { RVAudioStreamFormat_S16, 2, OUTPUT_SAMPLE_RATE };
 
     if (data->kssplay == nullptr) {
         return (RVReadInfo) { format, 0, RVReadStatus_Error, 0 };
@@ -251,21 +248,11 @@ static RVReadInfo libkss_plugin_read_data(void* user_data, RVReadData dest) {
         return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
     }
 
-    // Calculate how many frames to generate
-    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(float) * 2);
-    if (max_frames > BUFFER_SIZE) {
-        max_frames = BUFFER_SIZE;
-    }
+    // Calculate how many S16 stereo frames fit in the output buffer
+    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(int16_t) * 2);
 
-    // Generate audio (stereo interleaved S16)
-    KSSPLAY_calc(data->kssplay, data->temp_buffer, max_frames);
-
-    // Convert S16 to F32
-    float* output = (float*)dest.channels_output;
-    int sample_count = (int)max_frames * 2;
-    for (int i = 0; i < sample_count; i++) {
-        output[i] = (float)data->temp_buffer[i] / 32768.0f;
-    }
+    // Generate stereo S16 directly to output buffer
+    KSSPLAY_calc(data->kssplay, (int16_t*)dest.channels_output, max_frames);
 
     data->elapsed_frames += (int)max_frames;
 

@@ -24,7 +24,6 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #define OUTPUT_SAMPLE_RATE 48000 // Match system audio rate
-#define BUFFER_SIZE 4096
 
 static const RVIo* g_io_api = nullptr;
 const RVLog* g_rv_log = nullptr;
@@ -35,7 +34,6 @@ typedef struct AsapReplayerData {
     ASAP* asap;
     int current_subsong;
     int num_subsongs;
-    int16_t temp_buffer[BUFFER_SIZE * 2]; // Stereo buffer for S16 samples
 } AsapReplayerData;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -156,40 +154,21 @@ static RVProbeResult asap_probe_can_play(uint8_t* data, uint64_t data_size, cons
 static RVReadInfo asap_read_data(void* user_data, RVReadData dest) {
     AsapReplayerData* data = (AsapReplayerData*)user_data;
 
-    // Calculate how many bytes we can generate (stereo S16 = 4 bytes per frame)
-    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(float) * 2);
-    if (max_frames > BUFFER_SIZE) {
-        max_frames = BUFFER_SIZE;
-    }
-
     const ASAPInfo* info = ASAP_GetInfo(data->asap);
     int channels = ASAPInfo_GetChannels(info);
 
-    // Generate S16 samples
-    int bytes_needed = (int)(max_frames * channels * sizeof(int16_t));
+    // Calculate how many S16 frames fit in the output buffer
+    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(int16_t) * (uint32_t)channels);
+
+    // Generate S16 samples directly to output buffer
+    int bytes_needed = (int)(max_frames * (uint32_t)channels * sizeof(int16_t));
     int bytes_generated
-        = ASAP_Generate(data->asap, (uint8_t*)data->temp_buffer, bytes_needed, ASAPSampleFormat_S16_L_E);
+        = ASAP_Generate(data->asap, (uint8_t*)dest.channels_output, bytes_needed, ASAPSampleFormat_S16_L_E);
 
-    int frames_generated = bytes_generated / (channels * sizeof(int16_t));
+    int frames_generated = bytes_generated / ((int)sizeof(int16_t) * channels);
 
-    // Convert S16 to F32 and handle mono->stereo if needed
-    float* output = (float*)dest.channels_output;
-
-    if (channels == 2) {
-        // Stereo: direct conversion
-        for (int i = 0; i < frames_generated * 2; i++) {
-            output[i] = (float)data->temp_buffer[i] / 32768.0f;
-        }
-    } else {
-        // Mono: duplicate to stereo
-        for (int i = 0; i < frames_generated; i++) {
-            float sample = (float)data->temp_buffer[i] / 32768.0f;
-            output[i * 2] = sample;
-            output[i * 2 + 1] = sample;
-        }
-    }
-
-    RVAudioFormat format = { RVAudioStreamFormat_F32, 2, OUTPUT_SAMPLE_RATE };
+    // Report actual channel count - host handles mono->stereo upmix
+    RVAudioFormat format = { RVAudioStreamFormat_S16, (uint32_t)channels, OUTPUT_SAMPLE_RATE };
     RVReadStatus status = (frames_generated == 0) ? RVReadStatus_Finished : RVReadStatus_Ok;
     return (RVReadInfo) { format, (uint16_t)frames_generated, status, 0 };
 }

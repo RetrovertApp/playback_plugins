@@ -33,7 +33,6 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #define OUTPUT_SAMPLE_RATE 48000
-#define BUFFER_SIZE 4096
 
 static const RVIo* g_io_api = nullptr;
 const RVLog* g_rv_log = nullptr;
@@ -47,7 +46,6 @@ typedef struct Sc68ReplayerData {
     int current_subsong;
     int num_subsongs;
     int duration_ms;
-    int16_t temp_buffer[BUFFER_SIZE * 2]; // Stereo buffer for S16 samples
     int scope_enabled;
 } Sc68ReplayerData;
 
@@ -219,16 +217,14 @@ static RVProbeResult sc68_plugin_probe_can_play(uint8_t* data, uint64_t data_siz
 
 static RVReadInfo sc68_plugin_read_data(void* user_data, RVReadData dest) {
     Sc68ReplayerData* data = (Sc68ReplayerData*)user_data;
+    RVAudioFormat format = { RVAudioStreamFormat_S16, 2, OUTPUT_SAMPLE_RATE };
 
-    // Calculate how many frames we can generate (stereo S16 = 4 bytes per frame)
-    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(float) * 2);
-    if (max_frames > BUFFER_SIZE) {
-        max_frames = BUFFER_SIZE;
-    }
+    // Calculate how many S16 stereo frames fit in the output buffer
+    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(int16_t) * 2);
 
-    // SC68 produces stereo S16 samples
+    // SC68 produces stereo S16 samples directly to output buffer
     int samples_to_generate = (int)max_frames;
-    int code = sc68_process(data->sc68, data->temp_buffer, &samples_to_generate);
+    int code = sc68_process(data->sc68, (int16_t*)dest.channels_output, &samples_to_generate);
 
     RVReadStatus status = RVReadStatus_Ok;
     // Check SC68_ERROR first since it has all bits set (~0) and would match SC68_END check too
@@ -241,16 +237,7 @@ static RVReadInfo sc68_plugin_read_data(void* user_data, RVReadData dest) {
         status = RVReadStatus_Finished;
     }
 
-    int frames_generated = samples_to_generate;
-
-    // Convert S16 to F32
-    float* output = (float*)dest.channels_output;
-    for (int i = 0; i < frames_generated * 2; i++) {
-        output[i] = (float)data->temp_buffer[i] / 32768.0f;
-    }
-
-    RVAudioFormat format = { RVAudioStreamFormat_F32, 2, OUTPUT_SAMPLE_RATE };
-    return (RVReadInfo) { format, (uint16_t)frames_generated, status, 0 };
+    return (RVReadInfo) { format, (uint16_t)samples_to_generate, status, 0 };
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

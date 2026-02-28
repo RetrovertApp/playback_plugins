@@ -30,7 +30,6 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #define PMD_SAMPLE_RATE 44100
-#define PMD_BUFFER_SIZE 4096
 
 const RVLog* g_rv_log = nullptr;
 static int g_pmd_initialized = 0;
@@ -46,7 +45,6 @@ typedef struct PmdReplayerData {
     int file_open;
     int length_sec;
     int elapsed_frames;
-    int16_t temp_buffer[PMD_BUFFER_SIZE * 2]; // Stereo S16
     bool scope_enabled;
 } PmdReplayerData;
 
@@ -180,8 +178,7 @@ static RVProbeResult pmdmini_plugin_probe_can_play(uint8_t* probe_data, uint64_t
 
 static RVReadInfo pmdmini_plugin_read_data(void* user_data, RVReadData dest) {
     PmdReplayerData* data = (PmdReplayerData*)user_data;
-
-    RVAudioFormat format = { RVAudioStreamFormat_F32, 2, PMD_SAMPLE_RATE };
+    RVAudioFormat format = { RVAudioStreamFormat_S16, 2, PMD_SAMPLE_RATE };
 
     if (!data->file_open) {
         return (RVReadInfo) { format, 0, RVReadStatus_Error, 0 };
@@ -192,22 +189,11 @@ static RVReadInfo pmdmini_plugin_read_data(void* user_data, RVReadData dest) {
         return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
     }
 
-    // Calculate how many frames we can generate
-    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(float) * 2);
-    if (max_frames > PMD_BUFFER_SIZE) {
-        max_frames = PMD_BUFFER_SIZE;
-    }
+    // Calculate how many S16 stereo frames fit in the output buffer
+    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(int16_t) * 2);
 
-    // pmd_renderer outputs interleaved stereo S16 samples
-    // len parameter is the number of frames (not samples)
-    pmd_renderer(data->temp_buffer, (int)max_frames);
-
-    // Convert S16 to F32
-    float* output = (float*)dest.channels_output;
-    int sample_count = (int)max_frames * 2;
-    for (int i = 0; i < sample_count; i++) {
-        output[i] = (float)data->temp_buffer[i] / 32768.0f;
-    }
+    // pmd_renderer outputs interleaved stereo S16 directly to output buffer
+    pmd_renderer((int16_t*)dest.channels_output, (int)max_frames);
 
     data->elapsed_frames += (int)max_frames;
 

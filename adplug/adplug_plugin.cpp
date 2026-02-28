@@ -31,7 +31,6 @@ const RVLog* g_rv_log = nullptr;
 // Constants
 
 static const uint32_t SAMPLE_RATE = 48000;
-static const float INT16_TO_FLOAT = 1.0f / 32768.0f;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Memory-based file provider for AdPlug
@@ -365,8 +364,7 @@ static void adplug_close(void* user_data) {
 
 static RVReadInfo adplug_read_data(void* user_data, RVReadData dest) {
     AdplugData* data = static_cast<AdplugData*>(user_data);
-
-    RVAudioFormat format = { RVAudioStreamFormat_F32, 2, SAMPLE_RATE };
+    RVAudioFormat format = { RVAudioStreamFormat_S16, 2, SAMPLE_RATE };
     RVReadInfo info = { format, 0, RVReadStatus_Ok, 0 };
 
     if (data->player == nullptr || data->opl == nullptr) {
@@ -374,10 +372,9 @@ static RVReadInfo adplug_read_data(void* user_data, RVReadData dest) {
         return info;
     }
 
-    float* output = static_cast<float*>(dest.channels_output);
-    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(float) * 2);
+    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(int16_t) * 2);
 
-    // Limit to our temp buffer size
+    // Limit to our temp buffer size (OPL renders into temp_buffer)
     if (max_frames > data->temp_buffer_size / 2) {
         max_frames = data->temp_buffer_size / 2;
     }
@@ -387,7 +384,7 @@ static RVReadInfo adplug_read_data(void* user_data, RVReadData dest) {
     int16_t peak_left = 0;
     int16_t peak_right = 0;
 
-    // Render audio using tick-based loop
+    // Render audio using tick-based loop into temp_buffer
     while (frames_generated < max_frames && !finished) {
         // Calculate samples until next tick
         uint32_t samples_until_tick = static_cast<uint32_t>(data->samples_per_tick - data->sample_accumulator);
@@ -421,17 +418,10 @@ static RVReadInfo adplug_read_data(void* user_data, RVReadData dest) {
         }
     }
 
-    // Convert S16 to F32 and track VU meters
+    // Track VU meters on the S16 data
     for (uint32_t i = 0; i < frames_generated * 2; i += 2) {
-        int16_t left = data->temp_buffer[i];
-        int16_t right = data->temp_buffer[i + 1];
-
-        output[i] = static_cast<float>(left) * INT16_TO_FLOAT;
-        output[i + 1] = static_cast<float>(right) * INT16_TO_FLOAT;
-
-        // Track peak for VU meters
-        int16_t abs_left = (left < 0) ? static_cast<int16_t>(-left) : left;
-        int16_t abs_right = (right < 0) ? static_cast<int16_t>(-right) : right;
+        int16_t abs_left = (data->temp_buffer[i] < 0) ? static_cast<int16_t>(-data->temp_buffer[i]) : data->temp_buffer[i];
+        int16_t abs_right = (data->temp_buffer[i + 1] < 0) ? static_cast<int16_t>(-data->temp_buffer[i + 1]) : data->temp_buffer[i + 1];
         if (abs_left > peak_left) {
             peak_left = abs_left;
         }
@@ -443,6 +433,9 @@ static RVReadInfo adplug_read_data(void* user_data, RVReadData dest) {
     // Convert peak to 0-255 VU value (shift right by 7 to get top 8 bits of 15-bit value)
     data->vu_left = static_cast<uint8_t>((peak_left >> 7) & 0xFF);
     data->vu_right = static_cast<uint8_t>((peak_right >> 7) & 0xFF);
+
+    // Copy S16 from temp_buffer to output
+    memcpy(dest.channels_output, data->temp_buffer, frames_generated * 2 * sizeof(int16_t));
 
     info.frame_count = frames_generated;
 

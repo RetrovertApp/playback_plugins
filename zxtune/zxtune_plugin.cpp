@@ -308,13 +308,14 @@ static RVProbeResult zxtune_probe_can_play(uint8_t* probe_data, uint64_t data_si
 
 static RVReadInfo zxtune_read_data(void* user_data, RVReadData dest) {
     auto* data = static_cast<ZXTuneData*>(user_data);
+    RVAudioFormat format = { RVAudioStreamFormat_S16, 2, FREQ };
 
     if (!data->renderer) {
-        return RVReadInfo { { RVAudioStreamFormat_F32, 2, FREQ }, 0, RVReadStatus_Error, 0 };
+        return RVReadInfo { format, 0, RVReadStatus_Error, 0 };
     }
 
-    float* output = static_cast<float*>(dest.channels_output);
-    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(float) * 2);
+    auto* output = static_cast<int16_t*>(dest.channels_output);
+    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(int16_t) * 2);
     uint32_t frames_written = 0;
 
     while (frames_written < max_frames) {
@@ -324,30 +325,28 @@ static RVReadInfo zxtune_read_data(void* user_data, RVReadData dest) {
             data->chunk_offset = 0;
 
             if (data->chunk.empty()) {
-                // End of track
                 if (frames_written == 0) {
-                    return RVReadInfo { { RVAudioStreamFormat_F32, 2, FREQ }, 0, RVReadStatus_Finished, 0 };
+                    return RVReadInfo { format, 0, RVReadStatus_Finished, 0 };
                 }
                 break;
             }
         }
 
-        // Copy samples from chunk to output, converting S16 to F32
+        // Copy S16 samples from chunk to output
         size_t samples_available = data->chunk.size() - data->chunk_offset;
         size_t frames_needed = max_frames - frames_written;
         size_t frames_to_copy = std::min(samples_available, frames_needed);
 
         for (size_t i = 0; i < frames_to_copy; i++) {
             const Sound::Sample& sample = data->chunk[data->chunk_offset + i];
-            output[(frames_written + i) * 2] = static_cast<float>(sample.Left()) / 32768.0f;
-            output[(frames_written + i) * 2 + 1] = static_cast<float>(sample.Right()) / 32768.0f;
+            output[(frames_written + i) * 2] = static_cast<int16_t>(sample.Left());
+            output[(frames_written + i) * 2 + 1] = static_cast<int16_t>(sample.Right());
         }
 
         data->chunk_offset += frames_to_copy;
         frames_written += static_cast<uint32_t>(frames_to_copy);
     }
 
-    RVAudioFormat format = { RVAudioStreamFormat_F32, 2, FREQ };
     return RVReadInfo { format, static_cast<uint16_t>(frames_written), RVReadStatus_Ok, 0 };
 }
 

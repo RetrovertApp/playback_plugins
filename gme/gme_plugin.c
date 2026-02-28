@@ -31,7 +31,6 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #define OUTPUT_SAMPLE_RATE 48000
-#define BUFFER_SIZE 4096
 
 static const RVIo* g_io_api = nullptr;
 const RVLog* g_rv_log = nullptr;
@@ -42,7 +41,6 @@ typedef struct GmeReplayerData {
     Music_Emu* emu;
     int current_track;
     int track_count;
-    int16_t temp_buffer[BUFFER_SIZE * 2]; // Stereo buffer for S16 samples
 } GmeReplayerData;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -270,40 +268,27 @@ static RVProbeResult gme_plugin_probe_can_play(uint8_t* probe_data, uint64_t dat
 
 static RVReadInfo gme_plugin_read_data(void* user_data, RVReadData dest) {
     GmeReplayerData* data = (GmeReplayerData*)user_data;
+    RVAudioFormat format = { RVAudioStreamFormat_S16, 2, OUTPUT_SAMPLE_RATE };
 
     if (data->emu == nullptr) {
-        RVAudioFormat format = { RVAudioStreamFormat_F32, 2, OUTPUT_SAMPLE_RATE };
         return (RVReadInfo) { format, 0, RVReadStatus_Error, 0 };
     }
 
-    // Check if track ended
     if (gme_track_ended(data->emu)) {
-        RVAudioFormat format = { RVAudioStreamFormat_F32, 2, OUTPUT_SAMPLE_RATE };
         return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
     }
 
-    // Calculate how many frames we can generate
-    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(float) * 2);
-    if (max_frames > BUFFER_SIZE) {
-        max_frames = BUFFER_SIZE;
-    }
+    // Calculate how many S16 stereo frames fit in the output buffer
+    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(int16_t) * 2);
 
-    // GME outputs stereo S16 samples - request count is in samples (frames * 2 for stereo)
+    // GME outputs stereo S16 samples directly to output buffer
     int sample_count = (int)max_frames * 2;
-    gme_err_t err = gme_play(data->emu, sample_count, data->temp_buffer);
+    gme_err_t err = gme_play(data->emu, sample_count, (int16_t*)dest.channels_output);
     if (err != nullptr) {
         rv_error("GME playback error: %s", err);
-        RVAudioFormat format = { RVAudioStreamFormat_F32, 2, OUTPUT_SAMPLE_RATE };
         return (RVReadInfo) { format, 0, RVReadStatus_Error, 0 };
     }
 
-    // Convert S16 to F32
-    float* output = (float*)dest.channels_output;
-    for (int i = 0; i < sample_count; i++) {
-        output[i] = (float)data->temp_buffer[i] / 32768.0f;
-    }
-
-    RVAudioFormat format = { RVAudioStreamFormat_F32, 2, OUTPUT_SAMPLE_RATE };
     RVReadStatus status = gme_track_ended(data->emu) ? RVReadStatus_Finished : RVReadStatus_Ok;
     return (RVReadInfo) { format, (uint16_t)max_frames, status, 0 };
 }

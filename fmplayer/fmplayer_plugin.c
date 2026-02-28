@@ -25,7 +25,6 @@
 #include "opnatimer.h"
 #include "ppz8.h"
 
-#include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,11 +38,8 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // OPNA native output rate (7987200 Hz master clock / 144)
+// OPNA native output rate (7987200 Hz master clock / 144)
 #define OPNA_RATE 55467
-#define OUTPUT_SAMPLE_RATE 48000
-#define BUFFER_SIZE 4096
-// Max input frames needed for BUFFER_SIZE output frames at the resample ratio
-#define INPUT_BUFFER_SIZE ((BUFFER_SIZE * OPNA_RATE / OUTPUT_SAMPLE_RATE) + 16)
 // Default song length (4 minutes) since FMP files don't embed duration
 #define DEFAULT_LENGTH_MS (4 * 60 * 1000)
 // PPZ8 mix volume (from 98fmplayer reference)
@@ -63,14 +59,8 @@ typedef struct FmplayerData {
     uint8_t* adpcm_ram; // OPNA_ADPCM_RAM_SIZE bytes (256KB), heap allocated
     uint8_t* file_data; // Kept alive for driver access during playback
     int file_open;
-    int elapsed_frames; // Output frames elapsed (at OUTPUT_SAMPLE_RATE)
-    int max_frames;     // Max output frames before song ends
-    // Resampler state
-    double resample_pos; // Fractional position in input buffer
-    int16_t prev_left;   // Previous input sample for interpolation
-    int16_t prev_right;
-    // Temporary buffers
-    int16_t input_buffer[INPUT_BUFFER_SIZE * 2]; // Stereo S16 at OPNA_RATE
+    int elapsed_frames; // Output frames elapsed (at OPNA_RATE)
+    int max_frames;     // Max output frames before song ends (at OPNA_RATE)
 } FmplayerData;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -234,10 +224,7 @@ static int fmplayer_plugin_open(void* user_data, const char* url, uint32_t subso
 
     data->file_open = 1;
     data->elapsed_frames = 0;
-    data->max_frames = (int)(((int64_t)DEFAULT_LENGTH_MS * OUTPUT_SAMPLE_RATE) / 1000);
-    data->resample_pos = 0.0;
-    data->prev_left = 0;
-    data->prev_right = 0;
+    data->max_frames = (int)(((int64_t)DEFAULT_LENGTH_MS * OPNA_RATE) / 1000);
 
     return 0;
 }
@@ -292,7 +279,8 @@ static RVProbeResult fmplayer_plugin_probe_can_play(uint8_t* probe_data, uint64_
 static RVReadInfo fmplayer_plugin_read_data(void* user_data, RVReadData dest) {
     FmplayerData* data = (FmplayerData*)user_data;
 
-    RVAudioFormat format = { RVAudioStreamFormat_F32, 2, OUTPUT_SAMPLE_RATE };
+    // Report native format: S16 stereo at OPNA native rate
+    RVAudioFormat format = { RVAudioStreamFormat_S16, 2, OPNA_RATE };
 
     if (!data->file_open) {
         return (RVReadInfo) { format, 0, RVReadStatus_Error, 0 };
@@ -303,65 +291,13 @@ static RVReadInfo fmplayer_plugin_read_data(void* user_data, RVReadData dest) {
         return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
     }
 
-    // Calculate output frames
-    uint32_t out_frames = dest.channels_output_max_bytes_size / (sizeof(float) * 2);
-    if (out_frames > BUFFER_SIZE) {
-        out_frames = BUFFER_SIZE;
-    }
+    // Calculate output frames at OPNA native rate
+    uint32_t out_frames = dest.channels_output_max_bytes_size / (sizeof(int16_t) * 2);
 
-    // Calculate how many input frames we need at OPNA_RATE for the requested output
-    double ratio = (double)OPNA_RATE / (double)OUTPUT_SAMPLE_RATE;
-    uint32_t in_frames_needed = (uint32_t)(out_frames * ratio + data->resample_pos) + 2;
-    if (in_frames_needed > INPUT_BUFFER_SIZE) {
-        in_frames_needed = INPUT_BUFFER_SIZE;
-    }
-
-    // Generate audio at OPNA native rate (55467 Hz, stereo S16)
-    memset(data->input_buffer, 0, in_frames_needed * 2 * sizeof(int16_t));
-    opna_timer_mix(&data->timer, data->input_buffer, in_frames_needed);
-
-    // Resample from OPNA_RATE to OUTPUT_SAMPLE_RATE using linear interpolation
-    float* output = (float*)dest.channels_output;
-    double pos = data->resample_pos;
-
-    for (uint32_t i = 0; i < out_frames; i++) {
-        uint32_t idx = (uint32_t)pos;
-        double frac = pos - (double)idx;
-
-        int16_t cur_l, cur_r, next_l, next_r;
-        if (idx < in_frames_needed) {
-            cur_l = data->input_buffer[idx * 2];
-            cur_r = data->input_buffer[idx * 2 + 1];
-        } else {
-            cur_l = data->prev_left;
-            cur_r = data->prev_right;
-        }
-
-        if (idx + 1 < in_frames_needed) {
-            next_l = data->input_buffer[(idx + 1) * 2];
-            next_r = data->input_buffer[(idx + 1) * 2 + 1];
-        } else {
-            next_l = cur_l;
-            next_r = cur_r;
-        }
-
-        // Linear interpolation and S16 -> F32 conversion
-        float sample_l = (float)((double)cur_l + frac * ((double)next_l - (double)cur_l)) / 32768.0f;
-        float sample_r = (float)((double)cur_r + frac * ((double)next_r - (double)cur_r)) / 32768.0f;
-
-        output[i * 2] = sample_l;
-        output[i * 2 + 1] = sample_r;
-
-        pos += ratio;
-    }
-
-    // Save resampler state for next call
-    uint32_t consumed = (uint32_t)pos;
-    data->resample_pos = pos - (double)consumed;
-    if (consumed > 0 && consumed <= in_frames_needed) {
-        data->prev_left = data->input_buffer[(consumed - 1) * 2];
-        data->prev_right = data->input_buffer[(consumed - 1) * 2 + 1];
-    }
+    // Generate audio at OPNA native rate (55467 Hz, stereo S16) directly to output
+    int16_t* output = (int16_t*)dest.channels_output;
+    memset(output, 0, out_frames * 2 * sizeof(int16_t));
+    opna_timer_mix(&data->timer, output, out_frames);
 
     data->elapsed_frames += (int)out_frames;
 

@@ -40,8 +40,6 @@ const RVLog* g_rv_log = nullptr;
 
 typedef struct TfmxReplayerData {
     void* decoder;
-    int16_t* temp_buffer;
-    uint32_t temp_buffer_size;
     bool scope_enabled;
 } TfmxReplayerData;
 
@@ -67,11 +65,6 @@ static void* tfmx_create(const RVService* service_api) {
         return nullptr;
     }
 
-    // Allocate temp buffer for format conversion (16-bit to float)
-    // Buffer size for ~100ms of audio at 48kHz stereo
-    data->temp_buffer_size = SAMPLE_RATE / 10 * CHANNELS;
-    data->temp_buffer = (int16_t*)malloc(data->temp_buffer_size * sizeof(int16_t));
-
     g_io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
 
     return data;
@@ -85,9 +78,6 @@ static int tfmx_destroy(void* user_data) {
     if (data != nullptr) {
         if (data->decoder != nullptr) {
             tfmxdec_delete(data->decoder);
-        }
-        if (data->temp_buffer != nullptr) {
-            free(data->temp_buffer);
         }
         free(data);
     }
@@ -178,32 +168,20 @@ static void tfmx_close(void* user_data) {
 static RVReadInfo tfmx_read_data(void* user_data, RVReadData dest) {
     TfmxReplayerData* data = (TfmxReplayerData*)user_data;
 
-    // Calculate max frames we can output based on host buffer size
-    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(float) * CHANNELS);
-    float* output = (float*)dest.channels_output;
+    // Calculate how many S16 stereo frames fit in the output buffer
+    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(int16_t) * CHANNELS);
 
-    // Limit to our temp buffer size
-    uint32_t frames_to_generate = max_frames;
-    if (frames_to_generate * CHANNELS > data->temp_buffer_size) {
-        frames_to_generate = data->temp_buffer_size / CHANNELS;
-    }
-
-    // Fill the temp buffer with 16-bit samples
-    uint32_t bytes_to_fill = frames_to_generate * CHANNELS * sizeof(int16_t);
-    tfmxdec_buffer_fill(data->decoder, data->temp_buffer, bytes_to_fill);
-
-    // Convert S16 to F32
-    for (uint32_t i = 0; i < frames_to_generate * CHANNELS; i++) {
-        output[i] = (float)data->temp_buffer[i] / 32768.0f;
-    }
+    // Fill the output buffer directly with S16 samples
+    uint32_t bytes_to_fill = max_frames * CHANNELS * sizeof(int16_t);
+    tfmxdec_buffer_fill(data->decoder, (int16_t*)dest.channels_output, bytes_to_fill);
 
     // Check if song has ended
     int song_end = tfmxdec_song_end(data->decoder);
 
-    RVAudioFormat format = { RVAudioStreamFormat_F32, CHANNELS, SAMPLE_RATE };
+    RVAudioFormat format = { RVAudioStreamFormat_S16, CHANNELS, SAMPLE_RATE };
     RVReadStatus status = song_end ? RVReadStatus_Finished : RVReadStatus_Ok;
 
-    return (RVReadInfo) { format, (uint16_t)frames_to_generate, status, 0 };
+    return (RVReadInfo) { format, (uint16_t)max_frames, status, 0 };
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

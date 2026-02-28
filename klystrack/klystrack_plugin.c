@@ -31,7 +31,6 @@
 
 #define KT_SAMPLE_RATE 44100
 #define KT_CHANNELS 2
-#define KT_BUFFER_SIZE 4096
 
 static const RVIo* g_io_api = nullptr;
 const RVLog* g_rv_log = nullptr;
@@ -41,7 +40,6 @@ const RVLog* g_rv_log = nullptr;
 typedef struct KlystrackReplayerData {
     KPlayer* player;
     KSong* song;
-    int16_t temp_buffer[KT_BUFFER_SIZE * KT_CHANNELS];
     int length_ms;
     int elapsed_frames;
     bool finished;
@@ -181,34 +179,23 @@ static void klystrack_close(void* user_data) {
 
 static RVReadInfo klystrack_read_data(void* user_data, RVReadData dest) {
     KlystrackReplayerData* data = (KlystrackReplayerData*)user_data;
-
-    RVAudioFormat format = { RVAudioStreamFormat_F32, KT_CHANNELS, KT_SAMPLE_RATE };
+    RVAudioFormat format = { RVAudioStreamFormat_S16, KT_CHANNELS, KT_SAMPLE_RATE };
 
     if (data->song == nullptr || data->finished) {
         return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
     }
 
-    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(float) * KT_CHANNELS);
-    if (max_frames > KT_BUFFER_SIZE) {
-        max_frames = KT_BUFFER_SIZE;
-    }
+    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(int16_t) * KT_CHANNELS);
 
-    // KSND_FillBuffer takes buffer length in bytes
+    // KSND_FillBuffer takes buffer length in bytes, outputs S16 directly to output buffer
     int bytes_to_fill = (int)(max_frames * KT_CHANNELS * sizeof(int16_t));
-    KSND_FillBuffer(data->player, data->temp_buffer, bytes_to_fill);
+    KSND_FillBuffer(data->player, (int16_t*)dest.channels_output, bytes_to_fill);
 
     // Check if playback position indicates end
     int pos = KSND_GetPlayPosition(data->player);
     int song_len = KSND_GetSongLength(data->song);
     if (pos >= song_len && song_len > 0) {
         data->finished = true;
-    }
-
-    // Convert S16 to F32
-    float* output = (float*)dest.channels_output;
-    int total_samples = (int)(max_frames * KT_CHANNELS);
-    for (int i = 0; i < total_samples; i++) {
-        output[i] = (float)data->temp_buffer[i] / 32768.0f;
     }
 
     data->elapsed_frames += (int)max_frames;

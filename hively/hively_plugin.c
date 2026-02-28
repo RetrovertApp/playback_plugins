@@ -142,14 +142,14 @@ static RVProbeResult hively_probe_can_play(uint8_t* data, uint64_t data_size, co
 static RVReadInfo hively_read_data(void* user_data, RVReadData dest) {
     struct HivelyReplayerData* data = (struct HivelyReplayerData*)user_data;
 
-    // Calculate max frames we can output based on host buffer size
-    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(float) * 2);
-    float* output = (float*)dest.channels_output;
+    // Calculate how many S16 stereo frames fit in the output buffer
+    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(int16_t) * 2);
+    int16_t* output = (int16_t*)dest.channels_output;
     uint32_t frames_written = 0;
     int reached_end = 0;
 
     while (frames_written < max_frames) {
-        // If buffer is empty, decode another frame
+        // If internal decode buffer is empty, decode another frame
         if (data->read_index >= data->frames_decoded) {
             int16_t* temp_buf = data->temp_data;
             int bytes = hvl_DecodeFrame(data->tune, (int8_t*)temp_buf, (int8_t*)temp_buf + 2, 4, &reached_end);
@@ -161,7 +161,7 @@ static RVReadInfo hively_read_data(void* user_data, RVReadData dest) {
             }
         }
 
-        // Copy from internal buffer to output, converting S16 to F32
+        // Copy S16 from internal decode buffer to output
         uint32_t available = (uint32_t)(data->frames_decoded - data->read_index);
         uint32_t to_copy = max_frames - frames_written;
         if (to_copy > available) {
@@ -169,15 +169,13 @@ static RVReadInfo hively_read_data(void* user_data, RVReadData dest) {
         }
 
         int16_t* src = &data->temp_data[data->read_index * 2];
-        for (uint32_t i = 0; i < to_copy * 2; i++) {
-            output[frames_written * 2 + i] = (float)src[i] / 32768.0f;
-        }
+        memcpy(&output[frames_written * 2], src, to_copy * 2 * sizeof(int16_t));
 
         data->read_index += (int)to_copy;
         frames_written += to_copy;
     }
 
-    RVAudioFormat format = { RVAudioStreamFormat_F32, 2, FREQ };
+    RVAudioFormat format = { RVAudioStreamFormat_S16, 2, FREQ };
     RVReadStatus status = (reached_end && frames_written == 0) ? RVReadStatus_Finished : RVReadStatus_Ok;
     return (RVReadInfo) { format, (uint16_t)frames_written, status, 0 };
 }

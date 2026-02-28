@@ -50,7 +50,6 @@
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define XSF_BUFFER_SIZE 4096
 #define XSF_DEFAULT_LENGTH_MS (180 * 1000) // 3 minutes default if no length tag
 
 static const RVIo* g_io_api = nullptr;
@@ -203,11 +202,6 @@ typedef struct XsfReplayerData {
     psf_file_callbacks psf_callbacks;
     int psf_version;
     int sample_rate;
-    int16_t temp_buffer[XSF_BUFFER_SIZE * 2]; // Stereo S16 buffer
-    // Resampling state for rate conversion (e.g. 44100 -> 48000)
-    int16_t resample_buf[XSF_BUFFER_SIZE * 2]; // Source samples buffer (stereo S16)
-    int resample_buf_len;                      // Valid source frames in resample_buf
-    double resample_pos;                       // Fractional source sample position
     // Metadata from PSF tags
     char title[256];
     char artist[256];
@@ -415,15 +409,13 @@ static int xsf_plugin_open(void* user_data, const char* url, uint32_t subsong, c
         data->emulator = nullptr;
     }
 
-    // Reset metadata, scope, and resampling state
+    // Reset metadata and scope state
     data->title[0] = '\0';
     data->artist[0] = '\0';
     data->game[0] = '\0';
     data->length_ms = -1;
     data->fade_ms = 0;
     data->scope_enabled = 0;
-    data->resample_pos = 0.0;
-    data->resample_buf_len = 0;
 
     // Save URL for seek
     strncpy(data->url, url, sizeof(data->url) - 1);
@@ -585,98 +577,22 @@ static RVReadInfo xsf_plugin_read_data(void* user_data, RVReadData dest) {
     XsfReplayerData* data = (XsfReplayerData*)user_data;
 
     if (data->emu_state == nullptr || data->emulator == nullptr) {
-        RVAudioFormat format = { RVAudioStreamFormat_F32, 2, 44100 };
+        RVAudioFormat format = { RVAudioStreamFormat_S16, 2, 44100 };
         return (RVReadInfo) { format, 0, RVReadStatus_Error, 0 };
     }
 
+    // Report native format: S16 stereo at emulator's native sample rate
     uint32_t native_rate = (uint32_t)data->sample_rate;
-    uint32_t target_rate = dest.info.format.sample_rate;
-    if (target_rate == 0) {
-        target_rate = native_rate;
+    RVAudioFormat format = { RVAudioStreamFormat_S16, 2, native_rate };
+
+    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(int16_t) * 2);
+
+    int rendered = data->emulator->render(data->emu_state, (int16_t*)dest.channels_output, (int)max_frames);
+    if (rendered <= 0) {
+        return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
     }
 
-    RVAudioFormat format = { RVAudioStreamFormat_F32, 2, target_rate };
-
-    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(float) * 2);
-    if (max_frames > XSF_BUFFER_SIZE) {
-        max_frames = XSF_BUFFER_SIZE;
-    }
-
-    // No resampling needed - direct path
-    if (native_rate == target_rate) {
-        int rendered = data->emulator->render(data->emu_state, data->temp_buffer, (int)max_frames);
-        if (rendered <= 0) {
-            return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
-        }
-
-        float* output = (float*)dest.channels_output;
-        int sample_count = rendered * 2;
-        for (int i = 0; i < sample_count; i++) {
-            output[i] = (float)data->temp_buffer[i] / 32768.0f;
-        }
-
-        return (RVReadInfo) { format, (uint32_t)rendered, RVReadStatus_Ok, 0 };
-    }
-
-    // Resampling path: native_rate -> target_rate via linear interpolation
-    float* output = (float*)dest.channels_output;
-    double step = (double)native_rate / (double)target_rate;
-
-    // Calculate how many source frames we need for max_frames output frames
-    double end_pos = data->resample_pos + step * max_frames;
-    int source_needed = (int)end_pos + 2;
-
-    // Generate more source frames if needed
-    int to_generate = source_needed - data->resample_buf_len;
-    if (to_generate > 0) {
-        int capacity = XSF_BUFFER_SIZE - data->resample_buf_len;
-        if (to_generate > capacity) {
-            to_generate = capacity;
-        }
-
-        int rendered
-            = data->emulator->render(data->emu_state, data->resample_buf + data->resample_buf_len * 2, to_generate);
-
-        if (rendered <= 0 && data->resample_buf_len == 0) {
-            return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
-        }
-        if (rendered > 0) {
-            data->resample_buf_len += rendered;
-        }
-    }
-
-    // Linear interpolation resample
-    uint32_t output_frames = 0;
-    double pos = data->resample_pos;
-
-    for (uint32_t i = 0; i < max_frames; i++) {
-        int idx = (int)pos;
-        if (idx + 1 >= data->resample_buf_len) {
-            break;
-        }
-
-        double frac = pos - idx;
-        int s = idx * 2;
-        output[i * 2] = (float)((1.0 - frac) * data->resample_buf[s] + frac * data->resample_buf[s + 2]) / 32768.0f;
-        output[i * 2 + 1]
-            = (float)((1.0 - frac) * data->resample_buf[s + 1] + frac * data->resample_buf[s + 3]) / 32768.0f;
-
-        pos += step;
-        output_frames++;
-    }
-
-    // Compact: remove fully consumed source frames, keep leftovers for next call
-    int consumed = (int)pos;
-    if (consumed > 0 && consumed < data->resample_buf_len) {
-        int remaining = data->resample_buf_len - consumed;
-        memmove(data->resample_buf, data->resample_buf + consumed * 2, (size_t)remaining * 2 * sizeof(int16_t));
-        data->resample_buf_len = remaining;
-    } else if (consumed >= data->resample_buf_len) {
-        data->resample_buf_len = 0;
-    }
-    data->resample_pos = pos - consumed;
-
-    return (RVReadInfo) { format, output_frames, RVReadStatus_Ok, 0 };
+    return (RVReadInfo) { format, (uint32_t)rendered, RVReadStatus_Ok, 0 };
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -710,10 +626,6 @@ static int64_t xsf_plugin_seek(void* user_data, int64_t ms) {
             if (data->emulator->post_load != nullptr) {
                 data->emulator->post_load(data->emu_state);
             }
-
-            // Reset resampling state
-            data->resample_pos = 0.0;
-            data->resample_buf_len = 0;
 
             return 0;
         }

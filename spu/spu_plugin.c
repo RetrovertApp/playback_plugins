@@ -34,7 +34,6 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #define SPU_DEFAULT_SAMPLE_RATE 44100
-#define SPU_BUFFER_SIZE 4096
 #define SPU_VAG_HEADER_SIZE 48
 #define SPU_ADPCM_BLOCK_SIZE 16
 #define SPU_SAMPLES_PER_BLOCK 28
@@ -263,7 +262,8 @@ static int spu_decode_block(const uint8_t* block, int16_t* out, int32_t* prev1, 
 static RVReadInfo spu_plugin_read_data(void* user_data, RVReadData dest) {
     SpuReplayerData* data = (SpuReplayerData*)user_data;
 
-    RVAudioFormat format = { RVAudioStreamFormat_F32, 2, data->sample_rate };
+    // Report native format: S16 mono at the file's sample rate
+    RVAudioFormat format = { RVAudioStreamFormat_S16, 1, data->sample_rate };
 
     if (data->adpcm_data == nullptr) {
         return (RVReadInfo) { format, 0, RVReadStatus_Error, 0 };
@@ -274,8 +274,8 @@ static RVReadInfo spu_plugin_read_data(void* user_data, RVReadData dest) {
         return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
     }
 
-    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(float) * 2);
-    float* output = (float*)dest.channels_output;
+    uint32_t max_frames = dest.channels_output_max_bytes_size / sizeof(int16_t);
+    int16_t* output = (int16_t*)dest.channels_output;
     uint32_t frames_written = 0;
     bool end_reached = false;
 
@@ -294,22 +294,23 @@ static RVReadInfo spu_plugin_read_data(void* user_data, RVReadData dest) {
             end_reached = true;
         }
 
-        // Copy samples to output, duplicating mono to stereo and converting S16 -> F32
+        // Copy decoded S16 samples directly to mono output
         uint32_t samples_to_copy = SPU_SAMPLES_PER_BLOCK;
         if (frames_written + samples_to_copy > max_frames) {
             samples_to_copy = max_frames - frames_written;
         }
 
-        for (uint32_t i = 0; i < samples_to_copy; i++) {
-            float s = (float)samples[i] / 32768.0f;
-            output[(frames_written + i) * 2 + 0] = s;
-            output[(frames_written + i) * 2 + 1] = s;
+        memcpy(&output[frames_written], samples, samples_to_copy * sizeof(int16_t));
 
-            if (data->scope_enabled) {
-                data->scope_buffer[data->scope_write_pos & SPU_SCOPE_BUFFER_MASK] = s;
+        // Convert to F32 for scope visualization
+        if (data->scope_enabled) {
+            for (uint32_t i = 0; i < samples_to_copy; i++) {
+                data->scope_buffer[data->scope_write_pos & SPU_SCOPE_BUFFER_MASK]
+                    = (float)samples[i] / 32768.0f;
                 data->scope_write_pos++;
             }
         }
+
         frames_written += samples_to_copy;
     }
 

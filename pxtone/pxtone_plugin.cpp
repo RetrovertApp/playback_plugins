@@ -26,7 +26,6 @@ extern "C" {
 
 #define PXTONE_SAMPLE_RATE 48000
 #define PXTONE_CHANNELS 2
-#define PXTONE_BUFFER_SIZE 4096
 
 static const RVIo* g_io_api = nullptr;
 const RVLog* g_rv_log = nullptr;
@@ -100,7 +99,6 @@ static bool pxtone_io_pos(void* user, int32_t* p_pos) {
 
 struct PxToneReplayerData {
     pxtnService* pxtn;
-    int16_t temp_buffer[PXTONE_BUFFER_SIZE * PXTONE_CHANNELS];
     int total_samples;
     bool finished;
     bool scope_enabled;
@@ -281,34 +279,23 @@ static void pxtone_close(void* user_data) {
 
 static RVReadInfo pxtone_read_data(void* user_data, RVReadData dest) {
     PxToneReplayerData* data = (PxToneReplayerData*)user_data;
-
-    RVAudioFormat format = { RVAudioStreamFormat_F32, PXTONE_CHANNELS, PXTONE_SAMPLE_RATE };
+    RVAudioFormat format = { RVAudioStreamFormat_S16, PXTONE_CHANNELS, PXTONE_SAMPLE_RATE };
 
     if (data->finished || !data->pxtn->moo_is_valid_data()) {
         return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
     }
 
-    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(float) * PXTONE_CHANNELS);
-    if (max_frames > PXTONE_BUFFER_SIZE) {
-        max_frames = PXTONE_BUFFER_SIZE;
-    }
+    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(int16_t) * PXTONE_CHANNELS);
 
-    // Moo expects buffer size in bytes (S16 interleaved stereo)
+    // Moo expects buffer size in bytes, outputs S16 directly to output buffer
     int32_t bytes_to_render = (int32_t)(max_frames * PXTONE_CHANNELS * sizeof(int16_t));
-    bool moo_ok = data->pxtn->Moo(data->temp_buffer, bytes_to_render);
+    bool moo_ok = data->pxtn->Moo(static_cast<int16_t*>(dest.channels_output), bytes_to_render);
 
     if (!moo_ok || data->pxtn->moo_is_end_vomit()) {
         data->finished = true;
         if (!moo_ok) {
             return (RVReadInfo) { format, 0, RVReadStatus_Finished, 0 };
         }
-    }
-
-    // Convert S16 to F32
-    float* output = (float*)dest.channels_output;
-    int32_t total_samples = (int32_t)(max_frames * PXTONE_CHANNELS);
-    for (int32_t i = 0; i < total_samples; i++) {
-        output[i] = (float)data->temp_buffer[i] / 32768.0f;
     }
 
     RVReadStatus status = data->finished ? RVReadStatus_Finished : RVReadStatus_Ok;
