@@ -1,0 +1,104 @@
+This plugin's integration code (furnace_plugin.cpp and CMakeLists.txt) is
+licensed under the MIT License. See the top-level LICENSE file.
+
+Third-party dependencies:
+=========================
+
+Furnace Tracker 0.6.8.3
+License: GPL-2.0-or-later
+Source: https://github.com/tildearrow/furnace
+
+Furnace Tracker - Copyright (C) 2021-2025 tildearrow and contributors
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along
+with this program; if not, write to the Free Software Foundation, Inc.,
+51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+The full text of the GPL-2.0 can be found at:
+https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+
+---
+
+furnace_adpcm
+License: Unlicense (Public Domain)
+Source: https://github.com/jmanthony3/ADPCM (furnace fork)
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the
+benefit of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+
+---
+
+{fmt} (furnace_fmt)
+License: MIT with optional exception
+Source: https://github.com/fmtlib/fmt
+
+Copyright (c) 2012 - present, Victor Zverovich and {fmt} contributors
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+--- Optional exception ---
+
+In addition, as a special exception, the copyright holders of {fmt}
+give you permission to combine {fmt} with free software programs or
+libraries that are released under the GNU LGPL and with code included
+in the standard release of compiler libraries. You may copy and
+distribute such a system following the terms of the GNU LGPL for {fmt}
+and the licenses of the other code concerned, provided that you include
+the source code of that other code when and as the GNU LGPL requires
+distribution of source code.
+
+Note that people who make modified versions of {fmt} are not obligated
+to grant this special exception for their modified versions; it is
+their choice whether to do so. The GNU General Public License gives
+permission to release a modified version without this exception; this
+exception also makes it possible to release a modified version which
+carries forward this exception.

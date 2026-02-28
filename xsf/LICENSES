@@ -1,0 +1,124 @@
+This plugin's integration code (xsf_plugin.c, xsf_psf.c,
+and CMakeLists.txt) is licensed under the MIT License. See the top-level
+LICENSE file.
+
+Third-party dependencies:
+=========================
+
+psflib
+License: MIT
+Source: https://gitlab.com/kode54/psflib
+Copyright: (c) 2012-2015 Christopher Snowhill
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+---
+
+Highly Experimental (PSX/PS2 emulation for PSF/PSF2)
+License: GPL-3.0
+Source: https://gitlab.com/kode54/highly_experimental
+
+                    GNU GENERAL PUBLIC LICENSE
+                       Version 3, 29 June 2007
+
+ Copyright (C) 2007 Free Software Foundation, Inc.
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.
+
+The full text of the GPL-3.0 can be found at:
+https://www.gnu.org/licenses/gpl-3.0.html
+
+---
+
+Highly Theoretical (Sega Saturn/Dreamcast emulation for SSF/DSF)
+License: GPL-3.0
+Source: https://gitlab.com/kode54/highly_theoretical
+
+(Same GPL-3.0 license terms as Highly Experimental above.)
+
+---
+
+Highly Quixotic (Capcom QSound emulation for QSF)
+License: GPL-3.0
+Source: https://gitlab.com/kode54/highly_quixotic
+
+(Same GPL-3.0 license terms as Highly Experimental above.)
+
+---
+
+lazyusf2 (Nintendo 64 emulation for USF)
+License: GPL-2.0-or-later
+Source: https://gitlab.com/kode54/lazyusf2
+
+Based on mupen64plus, licensed under GPL-2.0-or-later.
+
+                    GNU GENERAL PUBLIC LICENSE
+                       Version 2, June 1991
+
+ Copyright (C) 1989, 1991 Free Software Foundation, Inc.,
+ 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.
+
+The full text of the GPL-2.0 can be found at:
+https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+
+---
+
+viogsf (Game Boy Advance emulation for GSF)
+License: GPL-2.0-or-later
+Source: https://gitlab.com/kode54/viogsf
+
+Based on VisualBoyAdvance-M (VBA-M):
+  Copyright (C) 1999-2003 Forgotten
+  Copyright (C) 2004-2006 Forgotten and the VBA development team
+  Copyright (C) 2007-2008 VBA-M development team
+
+Licensed under GPL-2.0-or-later (same terms as lazyusf2 above).
+
+---
+
+vio2sf (Nintendo DS emulation for 2SF)
+License: GPL-2.0-or-later
+Source: https://gitlab.com/kode54/vio2sf
+
+Based on DeSmuME, licensed under GPL-2.0-or-later
+(same terms as lazyusf2 above).
+
+---
+
+snsf9x (Super Nintendo emulation for SNSF)
+License: LGPL-2.1 (APU code) / Snes9x license (emulator core)
+Source: https://gitlab.com/kode54/snsf9x
+
+The APU/DSP audio code is licensed under LGPL-2.1:
+
+                  GNU LESSER GENERAL PUBLIC LICENSE
+                       Version 2.1, February 1999
+
+ Copyright (C) 1991, 1999 Free Software Foundation, Inc.
+ 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.
+
+The full text of the LGPL-2.1 can be found at:
+https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+
+The Snes9x emulator core has its own license terms - see the snes9x
+source distribution for details.

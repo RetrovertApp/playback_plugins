@@ -1,0 +1,151 @@
+Third-Party Software Notices
+============================
+
+This repository contains playback plugins that link against various
+third-party libraries. Each plugin directory contains a LICENSES file
+with full license details for its dependencies.
+
+Below is a summary of all third-party libraries used, organized by plugin.
+
+Plugin: adplug
+  - AdPlug 2.4 (LGPL-2.1) - https://github.com/adplug/adplug
+  - libbinio 1.5 (LGPL-2.1) - https://github.com/adplug/libbinio
+
+Plugin: asap
+  - ASAP - Another Slight Atari Player (GPL-2.0-or-later) - https://asap.sourceforge.net
+
+Plugin: audio_stream
+  - dr_flac (Public Domain / MIT-0) - https://github.com/mackron/dr_libs
+  - dr_wav (Public Domain / MIT-0) - https://github.com/mackron/dr_libs
+  - dr_mp3 (Public Domain / MIT-0) - https://github.com/mackron/dr_libs
+  - stb_vorbis (MIT / Public Domain) - https://github.com/nothings/stb
+
+Plugin: cpsycle
+  - cpsycle-lib (GPL-2.0) - https://github.com/emoon/cpsycle-lib
+
+Plugin: eupmini
+  - eupmini (GPL-2.0) - https://github.com/gzaffin/eupmini
+
+Plugin: fmplayer
+  - 98fmplayer (BSD-2-Clause) - https://github.com/myon98/98fmplayer
+
+Plugin: furnace
+  - Furnace 0.6.8.3 (GPL-2.0-or-later) - https://github.com/tildearrow/furnace
+  - adpcm (Public Domain / Unlicense) - https://github.com/superctr/adpcm
+  - fmt (MIT) - https://github.com/fmtlib/fmt
+
+Plugin: gme
+  - Game Music Emu 0.6.4 (LGPL-2.1 / GPL-2.0) - https://github.com/libgme/game-music-emu
+
+Plugin: hively
+  - Hively Tracker replay (BSD-3-Clause) - bundled from zxtune project
+
+Plugin: klystrack
+  - klystron (MIT) - https://github.com/kometbomb/klystron
+
+Plugin: libkss
+  - libkss 1.2.1 (MIT) - https://github.com/digital-sound-antiques/libkss
+  - emu2149 (MIT) - https://github.com/digital-sound-antiques/emu2149
+  - emu2212 (MIT) - https://github.com/digital-sound-antiques/emu2212
+  - emu2413 (MIT) - https://github.com/digital-sound-antiques/emu2413
+  - emu76489 (MIT) - https://github.com/digital-sound-antiques/emu76489
+  - emu8950 (MIT) - https://github.com/digital-sound-antiques/emu8950
+  - kmz80 (MIT) - https://github.com/digital-sound-antiques/kmz80
+  - libkss-drivers (MIT) - https://github.com/digital-sound-antiques/libkss-drivers
+
+Plugin: libvgm
+  - libvgm (GPL-2.0) - https://github.com/ValleyBell/libvgm
+
+Plugin: mdxmini
+  - mdxmini 2.0.0 (GPL-2.0) - https://github.com/mistydemeo/mdxmini
+
+Plugin: openmpt
+  - libopenmpt 0.8.4 (BSD-3-Clause) - https://lib.openmpt.org/libopenmpt/
+
+Plugin: organya
+  - organya.h (BSD-0-Clause) - https://github.com/Strultz/organya.h
+
+Plugin: pmdmini
+  - pmdmini 2.0.0 (GPL-2.0) - https://github.com/mistydemeo/pmdmini
+
+Plugin: pxtone
+  - libpxtone (Custom permissive) - https://pxtone.org/
+
+Plugin: sc68
+  - sc68 3.0.0b (GPL-3.0) - https://github.com/Zeinok/sc68
+
+Plugin: sidplayfp
+  - libsidplayfp 2.16.0 (GPL-2.0) - https://github.com/libsidplayfp/libsidplayfp
+
+Plugin: spu
+  - (No third-party dependencies - self-contained PS-ADPCM decoder)
+
+Plugin: sunvox
+  - SunVox library 2.1.2b (MIT for lib_sundog; SunVox library is free
+    for use with attribution) - https://github.com/warmplace/sunvox_dll
+
+Plugin: tfmx
+  - libtfmxaudiodecoder (GPL-2.0) - bundled
+
+Plugin: uade
+  - UADE (GPL-2.0) - https://zakalwe.fi/uade/
+
+Plugin: v2m
+  - v2m-player (Artistic-2.0) - https://github.com/jgilje/v2m-player
+
+Plugin: xsf
+  - psflib (MIT) - https://gitlab.com/kode54/psflib
+  - Highly Experimental (GPL-3.0) - https://gitlab.com/kode54/highly_experimental
+  - Highly Theoretical (GPL-3.0) - https://gitlab.com/kode54/highly_theoretical
+  - Highly Quixotic (GPL-3.0) - https://gitlab.com/kode54/highly_quixotic
+  - lazyusf2 (GPL-2.0-or-later) - https://gitlab.com/kode54/lazyusf2
+  - viogsf (GPL-2.0-or-later) - https://gitlab.com/kode54/viogsf
+  - vio2sf (GPL-2.0-or-later) - https://gitlab.com/kode54/vio2sf
+  - snsf9x (LGPL-2.1 / Snes9x license) - https://gitlab.com/kode54/snsf9x
+
+Plugin: zxtune
+  - ZXTune r5100 (LGPL-3.0) - https://github.com/vitamin-caig/zxtune
+
+
+License Summary
+===============
+
+The following license types are used by third-party dependencies:
+
+  GPL-2.0 / GPL-2.0-or-later:
+    cpsycle, eupmini, furnace, libvgm, mdxmini, pmdmini, sidplayfp,
+    tfmx, uade, lazyusf2, viogsf, vio2sf, asap
+
+  GPL-3.0:
+    highly_experimental, highly_theoretical, highly_quixotic, sc68
+
+  LGPL-2.1:
+    adplug, libbinio, gme, snsf9x (APU code)
+
+  LGPL-3.0:
+    zxtune
+
+  MIT:
+    klystron, libkss (+ emu modules), psflib, fmt, sunvox (lib_sundog)
+
+  BSD-2-Clause:
+    98fmplayer
+
+  BSD-3-Clause:
+    libopenmpt, hively
+
+  BSD-0-Clause:
+    organya.h
+
+  Artistic-2.0:
+    v2m-player
+
+  Public Domain / MIT-0:
+    dr_libs (dr_flac, dr_wav, dr_mp3), stb_vorbis, adpcm
+
+  Custom permissive:
+    libpxtone, sunvox (SunVox library - free with attribution)
+
+NOTE: Plugins that use GPL-licensed libraries produce shared library
+files that are subject to the GPL terms of their respective dependencies.
+The plugin integration code itself is MIT-licensed (see top-level LICENSE).

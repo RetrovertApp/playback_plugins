@@ -1,0 +1,41 @@
+This plugin's integration code (adplug_plugin.c and CMakeLists.txt) is
+licensed under the MIT License. See the top-level LICENSE file.
+
+Third-party dependencies:
+=========================
+
+AdPlug 2.4
+License: LGPL-2.1
+Source: https://github.com/adplug/adplug
+
+                  GNU LESSER GENERAL PUBLIC LICENSE
+                       Version 2.1, February 1999
+
+ Copyright (C) 1991, 1999 Free Software Foundation, Inc.
+ 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.
+
+[This is the first released version of the Lesser GPL.  It also counts
+ as the successor of the GNU Library Public License, version 2, hence
+ the version number 2.1.]
+
+The full text of the LGPL-2.1 can be found at:
+https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+
+---
+
+libbinio 1.5
+License: LGPL-2.1
+Source: https://github.com/adplug/libbinio
+
+                  GNU LESSER GENERAL PUBLIC LICENSE
+                       Version 2.1, February 1999
+
+ Copyright (C) 1991, 1999 Free Software Foundation, Inc.
+ 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.
+
+The full text of the LGPL-2.1 can be found at:
+https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html

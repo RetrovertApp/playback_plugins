@@ -1,0 +1,42 @@
+This plugin's integration code (uade_plugin.cpp and CMakeLists.txt) is
+licensed under the MIT License. See the top-level LICENSE file.
+
+Third-party dependencies:
+=========================
+
+UADE (Unix Amiga Delitracker Emulator)
+License: GPL-2.0 (UAE emulation code); LGPL-2.1 (sound core)
+Source: https://gitlab.com/mvtiaine/uade
+Authors: Heikki Orsila, Michael Doering, and contributors
+
+The UADE source code is vendored in the uade/ subdirectory.
+
+From the UADE COPYING file:
+
+  This source distribution contains works with various licenses. Please read
+  copyright notices of those works before reuse.
+
+  All the code from the UAE (Unix Amiga Emulator) project is licensed
+  under the GNU GPL. Read COPYING.GPL for details of the GNU GPL license.
+
+  Files under players/ directory are licensed with various different licenses
+  and quite a many different copyright holders. See inside the player binaries
+  for more details.
+
+  Sound core in directory amigasrc/score/ is licensed under the GNU LGPL.
+
+The full text of the GPL-2.0 can be found at:
+https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+
+The full text of the LGPL-2.1 can be found at:
+https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+
+---
+
+bencode
+License: Unknown (no license file included)
+Source: Vendored in bencode/ subdirectory
+
+The bencode library is vendored in the bencode/ subdirectory and is used
+by UADE for data serialization. No formal license file was found in the
+source distribution.
