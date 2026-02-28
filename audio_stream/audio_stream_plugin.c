@@ -29,8 +29,9 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Module-local globals for API access
 
-static const RVIo* g_io_api = nullptr;
-const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_IO_API();
+RV_PLUGIN_USE_METADATA_API();
+RV_PLUGIN_USE_LOG_API();
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Plugin instance data
@@ -158,8 +159,6 @@ static void* audio_stream_create(const RVService* service_api) {
     }
     memset(data, 0, sizeof(AudioStreamData));
 
-    g_io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-
     return data;
 }
 
@@ -177,7 +176,7 @@ static int audio_stream_destroy(void* user_data) {
     }
 
     if (data->file_data != nullptr) {
-        RVIo_free_url_to_memory(g_io_api, (void*)data->file_data);
+        rv_io_free_url_to_memory((void*)data->file_data);
     }
 
     free(data);
@@ -213,12 +212,12 @@ static int audio_stream_open(void* user_data, const char* url, uint32_t subsong,
     }
 
     if (data->file_data != nullptr) {
-        RVIo_free_url_to_memory(g_io_api, (void*)data->file_data);
+        rv_io_free_url_to_memory((void*)data->file_data);
         data->file_data = nullptr;
     }
 
     // Load file into memory
-    RVIoReadUrlResult read_res = RVIo_read_url_to_memory(g_io_api, url);
+    RVIoReadUrlResult read_res = rv_io_read_url_to_memory(url);
     if (read_res.data == nullptr) {
         rv_error("Failed to load %s to memory", url);
         return -1;
@@ -245,14 +244,14 @@ static int audio_stream_open(void* user_data, const char* url, uint32_t subsong,
             break;
         default:
             rv_error("Unknown audio format for %s", url);
-            RVIo_free_url_to_memory(g_io_api, (void*)data->file_data);
+            rv_io_free_url_to_memory((void*)data->file_data);
             data->file_data = nullptr;
             return -1;
     }
 
     if (data->decoder == nullptr) {
         rv_error("Failed to create decoder for %s", url);
-        RVIo_free_url_to_memory(g_io_api, (void*)data->file_data);
+        rv_io_free_url_to_memory((void*)data->file_data);
         data->file_data = nullptr;
         return -1;
     }
@@ -272,7 +271,7 @@ static void audio_stream_close(void* user_data) {
     }
 
     if (data->file_data != nullptr) {
-        RVIo_free_url_to_memory(g_io_api, (void*)data->file_data);
+        rv_io_free_url_to_memory((void*)data->file_data);
         data->file_data = nullptr;
     }
 }
@@ -369,15 +368,10 @@ static const char* get_filename_from_url(const char* url) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int audio_stream_metadata(const char* url, const RVService* service_api) {
-    const RVIo* io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
-
-    if (io_api == nullptr || metadata_api == nullptr) {
-        return -1;
-    }
+    (void)service_api;
 
     // Load file to get duration
-    RVIoReadUrlResult read_res = RVIo_read_url_to_memory(io_api, url);
+    RVIoReadUrlResult read_res = rv_io_read_url_to_memory(url);
     if (read_res.data == nullptr) {
         rv_error("Failed to load %s for metadata", url);
         return -1;
@@ -403,12 +397,12 @@ static int audio_stream_metadata(const char* url, const RVService* service_api) 
             decoder = decoder_vorbis_open(file_data, file_size);
             break;
         default:
-            RVIo_free_url_to_memory(io_api, read_res.data);
+            rv_io_free_url_to_memory(read_res.data);
             return -1;
     }
 
     if (decoder == nullptr) {
-        RVIo_free_url_to_memory(io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
@@ -456,45 +450,45 @@ static int audio_stream_metadata(const char* url, const RVService* service_api) 
     }
 
     // Set metadata
-    RVMetadataId index = RVMetadata_create_url(metadata_api, url);
+    RVMetadataId index = rv_metadata_create_url(url);
 
     // Use extracted title or fall back to filename
     if (has_tags && audio_meta.title[0] != '\0') {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_TITLE_TAG, audio_meta.title);
+        rv_metadata_set_tag(index, RV_METADATA_TITLE_TAG, audio_meta.title);
     } else {
         const char* filename = get_filename_from_url(url);
         if (filename != nullptr) {
-            RVMetadata_set_tag(metadata_api, index, RV_METADATA_TITLE_TAG, filename);
+            rv_metadata_set_tag(index, RV_METADATA_TITLE_TAG, filename);
         }
     }
 
     // Set artist if available
     if (has_tags && audio_meta.artist[0] != '\0') {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_ARTIST_TAG, audio_meta.artist);
+        rv_metadata_set_tag(index, RV_METADATA_ARTIST_TAG, audio_meta.artist);
     }
 
     // Set album if available
     if (has_tags && audio_meta.album[0] != '\0') {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_ALBUM_TAG, audio_meta.album);
+        rv_metadata_set_tag(index, RV_METADATA_ALBUM_TAG, audio_meta.album);
     }
 
     // Set date if available
     if (has_tags && audio_meta.date[0] != '\0') {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_DATE_TAG, audio_meta.date);
+        rv_metadata_set_tag(index, RV_METADATA_DATE_TAG, audio_meta.date);
     }
 
     // Set genre if available
     if (has_tags && audio_meta.genre[0] != '\0') {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_GENRE_TAG, audio_meta.genre);
+        rv_metadata_set_tag(index, RV_METADATA_GENRE_TAG, audio_meta.genre);
     }
 
-    RVMetadata_set_tag(metadata_api, index, RV_METADATA_SONGTYPE_TAG, format_name);
-    RVMetadata_set_tag_f64(metadata_api, index, RV_METADATA_LENGTH_TAG, (double)length);
+    rv_metadata_set_tag(index, RV_METADATA_SONGTYPE_TAG, format_name);
+    rv_metadata_set_tag_f64(index, RV_METADATA_LENGTH_TAG, (double)length);
 
     // Clean up
     decoder->close(decoder->decoder_data);
     free(decoder);
-    RVIo_free_url_to_memory(io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
 
     return 0;
 }
@@ -511,7 +505,9 @@ static void audio_stream_event(void* user_data, uint8_t* data, uint64_t len) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void audio_stream_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    rv_init_log_api(service_api);
+    rv_init_io_api(service_api);
+    rv_init_metadata_api(service_api);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -45,8 +45,9 @@
 // PPZ8 mix volume (from 98fmplayer reference)
 #define PPZ8_MIX_VOLUME 0xa000
 
-static const RVIo* g_io_api = nullptr;
-const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_IO_API();
+RV_PLUGIN_USE_METADATA_API();
+RV_PLUGIN_USE_LOG_API();
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -131,7 +132,6 @@ static void* fmplayer_plugin_create(const RVService* service_api) {
         return nullptr;
     }
 
-    g_io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
     return data;
 }
 
@@ -184,7 +184,7 @@ static int fmplayer_plugin_open(void* user_data, const char* url, uint32_t subso
     data->file_data = nullptr;
     data->file_open = 0;
 
-    RVIoReadUrlResult read_res = RVIo_read_url_to_memory(g_io_api, url);
+    RVIoReadUrlResult read_res = rv_io_read_url_to_memory(url);
     if (read_res.data == nullptr) {
         rv_error("fmplayer: Failed to load %s to memory", url);
         return -1;
@@ -193,14 +193,14 @@ static int fmplayer_plugin_open(void* user_data, const char* url, uint32_t subso
     // FMP files are limited to 64KB
     if (read_res.data_size > 0xFFFF) {
         rv_error("fmplayer: File too large for FMP format: %s", url);
-        RVIo_free_url_to_memory(g_io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
     // Keep a copy of the file data (driver references it during playback)
     data->file_data = malloc((size_t)read_res.data_size);
     if (data->file_data == nullptr) {
-        RVIo_free_url_to_memory(g_io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
     memcpy(data->file_data, read_res.data, (size_t)read_res.data_size);
@@ -211,7 +211,7 @@ static int fmplayer_plugin_open(void* user_data, const char* url, uint32_t subso
     // Try loading as FMP format
     if (!fmp_load(&data->fmp, data->file_data, (uint16_t)read_res.data_size)) {
         rv_error("fmplayer: Failed to parse FMP file: %s", url);
-        RVIo_free_url_to_memory(g_io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         free(data->file_data);
         data->file_data = nullptr;
         return -1;
@@ -220,7 +220,7 @@ static int fmplayer_plugin_open(void* user_data, const char* url, uint32_t subso
     // Initialize the FMP driver (sets work->driver_opna_interrupt)
     fmp_init(&data->work, &data->fmp);
 
-    RVIo_free_url_to_memory(g_io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
 
     data->file_open = 1;
     data->elapsed_frames = 0;
@@ -320,15 +320,12 @@ static int64_t fmplayer_plugin_seek(void* user_data, int64_t ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int fmplayer_plugin_metadata(const char* url, const RVService* service_api) {
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
-    if (metadata_api == nullptr) {
-        return -1;
-    }
+    (void)service_api;
 
-    RVMetadataId index = RVMetadata_create_url(metadata_api, url);
-    RVMetadata_set_tag(metadata_api, index, RV_METADATA_SONGTYPE_TAG, "FMP");
-    RVMetadata_set_tag(metadata_api, index, RV_METADATA_AUTHORINGTOOL_TAG, "NEC PC-98");
-    RVMetadata_set_tag_f64(metadata_api, index, RV_METADATA_LENGTH_TAG, DEFAULT_LENGTH_MS / 1000.0);
+    RVMetadataId index = rv_metadata_create_url(url);
+    rv_metadata_set_tag(index, RV_METADATA_SONGTYPE_TAG, "FMP");
+    rv_metadata_set_tag(index, RV_METADATA_AUTHORINGTOOL_TAG, "NEC PC-98");
+    rv_metadata_set_tag_f64(index, RV_METADATA_LENGTH_TAG, DEFAULT_LENGTH_MS / 1000.0);
 
     return 0;
 }
@@ -344,7 +341,9 @@ static void fmplayer_plugin_event(void* user_data, uint8_t* event_data, uint64_t
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void fmplayer_plugin_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    rv_init_log_api(service_api);
+    rv_init_io_api(service_api);
+    rv_init_metadata_api(service_api);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

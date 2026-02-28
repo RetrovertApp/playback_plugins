@@ -28,8 +28,9 @@
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-static const RVIo* g_io_api = nullptr;
-static const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_IO_API();
+RV_PLUGIN_USE_LOG_API();
+RV_PLUGIN_USE_METADATA_API();
 
 struct SidPlayData {
     sidplayfp* engine;
@@ -50,10 +51,10 @@ static const char* sidplayfp_supported_extensions(void) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void* sidplayfp_create(const RVService* service_api) {
+    (void)service_api;
+
     SidPlayData* data = new SidPlayData();
     memset(data, 0, sizeof(SidPlayData));
-
-    g_io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
 
     data->engine = new sidplayfp();
     data->builder = new ReSIDfpBuilder("ReSIDfp");
@@ -90,7 +91,7 @@ static int sidplayfp_open(void* user_data, const char* url, uint32_t subsong, co
 
     RVIoReadUrlResult read_res;
 
-    if ((read_res = RVIo_read_url_to_memory(g_io_api, url)).data == nullptr) {
+    if ((read_res = rv_io_read_url_to_memory(url)).data == nullptr) {
         rv_error("Failed to load %s to memory", url);
         return -1;
     }
@@ -113,7 +114,7 @@ static int sidplayfp_open(void* user_data, const char* url, uint32_t subsong, co
     data->song_data = new uint8_t[data->song_data_size];
     memcpy(data->song_data, read_res.data, data->song_data_size);
 
-    RVIo_free_url_to_memory(g_io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
 
     // Load tune from memory
     data->tune = new SidTune(data->song_data, data->song_data_size);
@@ -190,8 +191,7 @@ static void sidplayfp_close(void* user_data) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-static RVProbeResult sidplayfp_probe_can_play(uint8_t* probe_data, uint64_t data_size, const char* url,
-                                              uint64_t total_size) {
+static RVProbeResult sidplayfp_probe_can_play(uint8_t* d, uint64_t data_size, const char* url, uint64_t total_size) {
     (void)url;
     (void)total_size;
 
@@ -200,8 +200,7 @@ static RVProbeResult sidplayfp_probe_can_play(uint8_t* probe_data, uint64_t data
     }
 
     // Check for PSID/RSID header
-    if ((probe_data[0] == 'P' || probe_data[0] == 'R') && probe_data[1] == 'S' && probe_data[2] == 'I'
-        && probe_data[3] == 'D') {
+    if ((d[0] == 'P' || d[0] == 'R') && d[1] == 'S' && d[2] == 'I' && d[3] == 'D') {
         return RVProbeResult_Supported;
     }
 
@@ -215,7 +214,7 @@ static RVReadInfo sidplayfp_read_data(void* user_data, RVReadData dest) {
     RVAudioFormat format = { RVAudioStreamFormat_S16, 2, FREQ };
 
     if (!data->tune) {
-        return RVReadInfo { format, 0, RVReadStatus_Error};
+        return RVReadInfo { format, 0, RVReadStatus_Error };
     }
 
     // Run emulator for one batch (play() caps at 20000 cycles internally)
@@ -225,18 +224,18 @@ static RVReadInfo sidplayfp_read_data(void* user_data, RVReadData dest) {
 
     if (samples < 0) {
         rv_error("sidplayfp playback error: %s", data->engine->error());
-        return RVReadInfo { format, 0, RVReadStatus_Error};
+        return RVReadInfo { format, 0, RVReadStatus_Error };
     }
 
     if (samples == 0) {
-        return RVReadInfo { format, 0, RVReadStatus_Finished};
+        return RVReadInfo { format, 0, RVReadStatus_Finished };
     }
 
     // Mix S16 stereo directly to output buffer
     auto* output = static_cast<int16_t*>(dest.channels_output);
     unsigned int mixed = data->engine->mix(output, static_cast<unsigned int>(samples));
 
-    return RVReadInfo { format, static_cast<uint16_t>(mixed / 2), RVReadStatus_Ok};
+    return RVReadInfo { format, static_cast<uint16_t>(mixed / 2), RVReadStatus_Ok };
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -251,16 +250,11 @@ static int64_t sidplayfp_seek(void* user_data, int64_t ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int sidplayfp_metadata(const char* url, const RVService* service_api) {
+    (void)service_api;
+
     RVIoReadUrlResult read_res;
 
-    const RVIo* io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
-
-    if (io_api == nullptr || metadata_api == nullptr) {
-        return -1;
-    }
-
-    if ((read_res = RVIo_read_url_to_memory(io_api, url)).data == nullptr) {
+    if ((read_res = rv_io_read_url_to_memory(url)).data == nullptr) {
         rv_error("Failed to load %s to memory", url);
         return -1;
     }
@@ -268,31 +262,31 @@ static int sidplayfp_metadata(const char* url, const RVService* service_api) {
     SidTune tune(static_cast<const uint8_t*>(read_res.data), static_cast<uint32_t>(read_res.data_size));
 
     if (!tune.getStatus()) {
-        RVIo_free_url_to_memory(io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
     const SidTuneInfo* info = tune.getInfo();
     if (!info) {
-        RVIo_free_url_to_memory(io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
-    RVMetadataId index = RVMetadata_create_url(metadata_api, url);
+    RVMetadataId index = rv_metadata_create_url(url);
 
     // Info strings: 0=title, 1=author, 2=released
     if (info->numberOfInfoStrings() > 0) {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_TITLE_TAG, info->infoString(0));
+        rv_metadata_set_tag(index, RV_METADATA_TITLE_TAG, info->infoString(0));
     }
     if (info->numberOfInfoStrings() > 1) {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_ARTIST_TAG, info->infoString(1));
+        rv_metadata_set_tag(index, RV_METADATA_ARTIST_TAG, info->infoString(1));
     }
     if (info->numberOfInfoStrings() > 2) {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_DATE_TAG, info->infoString(2));
+        rv_metadata_set_tag(index, RV_METADATA_DATE_TAG, info->infoString(2));
     }
 
     // Format string (PSID, RSID, etc.)
-    RVMetadata_set_tag(metadata_api, index, RV_METADATA_SONGTYPE_TAG, info->formatString());
+    rv_metadata_set_tag(index, RV_METADATA_SONGTYPE_TAG, info->formatString());
 
     // SID model info - include in message
     const char* sid_model = "Unknown";
@@ -309,10 +303,11 @@ static int sidplayfp_metadata(const char* url, const RVService* service_api) {
         default:
             break;
     }
-    RVMetadata_set_tag(metadata_api, index, RV_METADATA_MESSAGE_TAG, sid_model);
+
+    rv_metadata_set_tag(index, RV_METADATA_MESSAGE_TAG, sid_model);
 
     // Length is not available in SID files themselves (would need HVSC Songlengths.md5)
-    RVMetadata_set_tag_f64(metadata_api, index, RV_METADATA_LENGTH_TAG, 0.0);
+    rv_metadata_set_tag_f64(index, RV_METADATA_LENGTH_TAG, 0.0);
 
     // Add subsongs if more than one
     unsigned int songs = info->songs();
@@ -324,11 +319,11 @@ static int sidplayfp_metadata(const char* url, const RVService* service_api) {
             if (sub_info && sub_info->numberOfInfoStrings() > 0) {
                 sub_title = sub_info->infoString(0);
             }
-            RVMetadata_add_subsong(metadata_api, index, i, sub_title, 0.0f);
+            rv_metadata_add_subsong(index, i, sub_title, 0.0f);
         }
     }
 
-    RVIo_free_url_to_memory(io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
     return 0;
 }
 
@@ -344,7 +339,9 @@ static void sidplayfp_event(void* user_data, uint8_t* event_data, uint64_t len) 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void sidplayfp_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    rv_init_log_api(service_api);
+    rv_init_io_api(service_api);
+    rv_init_metadata_api(service_api);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -382,10 +379,13 @@ static uint32_t sidplayfp_get_scope_channel_names(void* user_data, const char** 
 
     const char** src = (sid_count > 1) ? s_multi_names : s_single_names;
     uint32_t count = static_cast<uint32_t>(sid_count) * 3;
+
     if (count > max_channels)
         count = max_channels;
+
     for (uint32_t i = 0; i < count; i++)
         names[i] = src[i];
+
     return count;
 }
 
@@ -420,8 +420,6 @@ static RVPlaybackPlugin g_sidplayfp_plugin = {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-extern "C" {
-RV_EXPORT RVPlaybackPlugin* rv_playback_plugin(void) {
+extern "C" RV_EXPORT RVPlaybackPlugin* rv_playback_plugin(void) {
     return &g_sidplayfp_plugin;
-}
 }

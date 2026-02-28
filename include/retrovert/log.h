@@ -35,6 +35,8 @@ typedef struct RVLog {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#define RV_PLUGIN_USE_LOG_API() const RVLog* g_rv_log = NULL
+
 #define rv_debug(...)                                                                  \
     {                                                                                  \
         extern const RVLog* g_rv_log;                                                  \

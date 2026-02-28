@@ -39,8 +39,9 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-static const RVIo* g_io_api = nullptr;
-const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_IO_API();
+RV_PLUGIN_USE_LOG_API();
+RV_PLUGIN_USE_METADATA_API();
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -62,7 +63,9 @@ static const char* organya_plugin_supported_extensions(void) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void organya_plugin_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    rv_init_log_api(service_api);
+    rv_init_io_api(service_api);
+    rv_init_metadata_api(service_api);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -138,8 +141,6 @@ static void* organya_plugin_create(const RVService* service_api) {
     }
     memset(data, 0, sizeof(OrganyaReplayerData));
 
-    g_io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-
     organya_result res = organya_context_init(&data->ctx);
     if (res != ORG_RESULT_SUCCESS) {
         rv_error("Organya: context init failed (%d)", (int)res);
@@ -201,13 +202,13 @@ static int organya_plugin_open(void* user_data, const char* url, uint32_t subson
     }
 
     RVIoReadUrlResult read_res;
-    if ((read_res = RVIo_read_url_to_memory(g_io_api, url)).data == nullptr) {
+    if ((read_res = rv_io_read_url_to_memory(url)).data == nullptr) {
         rv_error("Organya: Failed to load %s", url);
         return -1;
     }
 
     organya_result res = organya_context_read_song(&data->ctx, (const uint8_t*)read_res.data, read_res.data_size);
-    RVIo_free_url_to_memory(g_io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
 
     if (res != ORG_RESULT_SUCCESS) {
         rv_error("Organya: Failed to read song %s (%d)", url, (int)res);
@@ -305,18 +306,14 @@ static int64_t organya_plugin_seek(void* user_data, int64_t ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int organya_plugin_metadata(const char* url, const RVService* service_api) {
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
+    (void)service_api;
 
-    if (metadata_api == nullptr) {
-        return -1;
-    }
-
-    RVMetadataId id = RVMetadata_create_url(metadata_api, url);
-    RVMetadata_set_tag(metadata_api, id, RV_METADATA_SONGTYPE_TAG, "Organya");
+    RVMetadataId id = rv_metadata_create_url(url);
+    rv_metadata_set_tag(id, RV_METADATA_SONGTYPE_TAG, "Organya");
 
     // Organya files don't contain embedded metadata (title/artist).
     // Use default duration since songs loop forever.
-    RVMetadata_set_tag_f64(metadata_api, id, RV_METADATA_LENGTH_TAG, (double)ORG_DEFAULT_DURATION_S);
+    rv_metadata_set_tag_f64(id, RV_METADATA_LENGTH_TAG, (double)ORG_DEFAULT_DURATION_S);
 
     return 0;
 }

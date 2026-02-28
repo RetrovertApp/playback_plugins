@@ -49,8 +49,9 @@ static double s_last_logged_time = -1.0;
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Module-local globals for API access
 
-static const RVIo* g_io_api = nullptr;
-const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_IO_API();
+RV_PLUGIN_USE_METADATA_API();
+RV_PLUGIN_USE_LOG_API();
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Constants
@@ -191,8 +192,6 @@ static void* libvgm_create(const RVService* service_api) {
     }
     memset(data, 0, sizeof(LibvgmData));
 
-    g_io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-
     // Create PlayerA instance
     data->player = new PlayerA();
 
@@ -246,7 +245,7 @@ static int libvgm_destroy(void* user_data) {
     }
 
     if (data->file_data != nullptr) {
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
         data->file_data = nullptr;
     }
 
@@ -277,7 +276,7 @@ static int libvgm_open(void* user_data, const char* url, uint32_t subsong, const
     }
 
     if (data->file_data != nullptr) {
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
         data->file_data = nullptr;
     }
 
@@ -285,7 +284,7 @@ static int libvgm_open(void* user_data, const char* url, uint32_t subsong, const
     data->vu_right = 0;
 
     // Load file into memory
-    RVIoReadUrlResult read_res = RVIo_read_url_to_memory(g_io_api, url);
+    RVIoReadUrlResult read_res = rv_io_read_url_to_memory(url);
     if (read_res.data == nullptr) {
         rv_error("libvgm: Failed to load file: %s", url);
         return -1;
@@ -298,7 +297,7 @@ static int libvgm_open(void* user_data, const char* url, uint32_t subsong, const
     data->dload = MemoryLoader_Init(data->file_data, static_cast<UINT32>(data->file_size));
     if (data->dload == nullptr) {
         rv_error("libvgm: Failed to create data loader for: %s", url);
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
         data->file_data = nullptr;
         return -1;
     }
@@ -309,7 +308,7 @@ static int libvgm_open(void* user_data, const char* url, uint32_t subsong, const
         rv_error("libvgm: DataLoader_Load failed for: %s (error %d)", url, load_result);
         DataLoader_Deinit(data->dload);
         data->dload = nullptr;
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
         data->file_data = nullptr;
         return -1;
     }
@@ -320,7 +319,7 @@ static int libvgm_open(void* user_data, const char* url, uint32_t subsong, const
         rv_error("libvgm: Failed to load file into player: %s (error %d)", url, result);
         DataLoader_Deinit(data->dload);
         data->dload = nullptr;
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
         data->file_data = nullptr;
         return -1;
     }
@@ -411,7 +410,7 @@ static int libvgm_open(void* user_data, const char* url, uint32_t subsong, const
         data->player->UnloadFile();
         DataLoader_Deinit(data->dload);
         data->dload = nullptr;
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
         data->file_data = nullptr;
         return -1;
     }
@@ -437,7 +436,7 @@ static void libvgm_close(void* user_data) {
     }
 
     if (data->file_data != nullptr) {
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
         data->file_data = nullptr;
     }
 
@@ -548,15 +547,10 @@ static int64_t libvgm_seek(void* user_data, int64_t ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int libvgm_metadata(const char* url, const RVService* service_api) {
-    const RVIo* io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
-
-    if (io_api == nullptr || metadata_api == nullptr) {
-        return -1;
-    }
+    (void)service_api;
 
     // Load file
-    RVIoReadUrlResult read_res = RVIo_read_url_to_memory(io_api, url);
+    RVIoReadUrlResult read_res = rv_io_read_url_to_memory(url);
     if (read_res.data == nullptr) {
         rv_error("libvgm: Failed to load file for metadata: %s", url);
         return -1;
@@ -575,26 +569,26 @@ static int libvgm_metadata(const char* url, const RVService* service_api) {
     if (dload == nullptr) {
         // UnregisterAllPlayers handles deletion of registered engines
         player.UnregisterAllPlayers();
-        RVIo_free_url_to_memory(io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
     if (DataLoader_Load(dload) != 0) {
         DataLoader_Deinit(dload);
         player.UnregisterAllPlayers();
-        RVIo_free_url_to_memory(io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
     if (player.LoadFile(dload) != 0) {
         DataLoader_Deinit(dload);
         player.UnregisterAllPlayers();
-        RVIo_free_url_to_memory(io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
     // Create metadata entry
-    RVMetadataId index = RVMetadata_create_url(metadata_api, url);
+    RVMetadataId index = rv_metadata_create_url(url);
 
     // Get player base to access tags
     PlayerBase* base_player = player.GetPlayer();
@@ -612,17 +606,17 @@ static int libvgm_metadata(const char* url, const RVService* service_api) {
                 // Map libvgm tag types to RV metadata
                 // VGM tags: TITLE, TITLE_JP, GAME, GAME_JP, SYSTEM, SYSTEM_JP, ARTIST, ARTIST_JP, DATE, CREATOR, NOTES
                 if (strcmp(tag_type, "TITLE") == 0) {
-                    RVMetadata_set_tag(metadata_api, index, RV_METADATA_TITLE_TAG, tag_value);
+                    rv_metadata_set_tag(index, RV_METADATA_TITLE_TAG, tag_value);
                 } else if (strcmp(tag_type, "GAME") == 0) {
-                    RVMetadata_set_tag(metadata_api, index, RV_METADATA_ALBUM_TAG, tag_value);
+                    rv_metadata_set_tag(index, RV_METADATA_ALBUM_TAG, tag_value);
                 } else if (strcmp(tag_type, "SYSTEM") == 0) {
-                    RVMetadata_set_tag(metadata_api, index, RV_METADATA_SONGTYPE_TAG, tag_value);
+                    rv_metadata_set_tag(index, RV_METADATA_SONGTYPE_TAG, tag_value);
                 } else if (strcmp(tag_type, "ARTIST") == 0) {
-                    RVMetadata_set_tag(metadata_api, index, RV_METADATA_ARTIST_TAG, tag_value);
+                    rv_metadata_set_tag(index, RV_METADATA_ARTIST_TAG, tag_value);
                 } else if (strcmp(tag_type, "DATE") == 0) {
-                    RVMetadata_set_tag(metadata_api, index, RV_METADATA_DATE_TAG, tag_value);
+                    rv_metadata_set_tag(index, RV_METADATA_DATE_TAG, tag_value);
                 } else if (strcmp(tag_type, "NOTES") == 0) {
-                    RVMetadata_set_tag(metadata_api, index, RV_METADATA_MESSAGE_TAG, tag_value);
+                    rv_metadata_set_tag(index, RV_METADATA_MESSAGE_TAG, tag_value);
                 }
             }
         }
@@ -630,19 +624,19 @@ static int libvgm_metadata(const char* url, const RVService* service_api) {
         // Get format name from player
         const char* player_name = base_player->GetPlayerName();
         if (player_name != nullptr) {
-            RVMetadata_set_tag(metadata_api, index, RV_METADATA_SONGTYPE_TAG, player_name);
+            rv_metadata_set_tag(index, RV_METADATA_SONGTYPE_TAG, player_name);
         }
     }
 
     // Get duration (including loops and fade)
     double total_time = player.GetTotalTime(PLAYTIME_LOOP_INCL | PLAYTIME_WITH_FADE);
-    RVMetadata_set_tag_f64(metadata_api, index, RV_METADATA_LENGTH_TAG, total_time);
+    rv_metadata_set_tag_f64(index, RV_METADATA_LENGTH_TAG, total_time);
 
     // Clean up - UnregisterAllPlayers handles deletion of registered engines
     player.UnloadFile();
     DataLoader_Deinit(dload);
     player.UnregisterAllPlayers();
-    RVIo_free_url_to_memory(io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
 
     return 0;
 }
@@ -905,7 +899,9 @@ static int libvgm_get_pattern_num_rows(void* user_data, int pattern) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void libvgm_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    rv_init_log_api(service_api);
+    rv_init_io_api(service_api);
+    rv_init_metadata_api(service_api);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

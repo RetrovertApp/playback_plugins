@@ -42,8 +42,9 @@ void reportError(String what) {
 #define FURNACE_CHANNELS 2
 #define FURNACE_BUF_FRAMES 4096
 
-static const RVIo* g_io_api = nullptr;
-const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_IO_API();
+RV_PLUGIN_USE_METADATA_API();
+RV_PLUGIN_USE_LOG_API();
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -65,7 +66,9 @@ static const char* furnace_supported_extensions(void) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void furnace_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    rv_init_log_api(service_api);
+    rv_init_io_api(service_api);
+    rv_init_metadata_api(service_api);
 
     // Initialize Furnace's internal logging to stderr to prevent crash
     // when writeLog() is called before initLog() (logOut would be null)
@@ -83,8 +86,6 @@ static void* furnace_create(const RVService* service_api) {
     if (!data) {
         return nullptr;
     }
-
-    g_io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
 
     data->engine = new (std::nothrow) DivEngine();
     if (!data->engine) {
@@ -116,7 +117,7 @@ static int furnace_destroy(void* user_data) {
         delete data->engine;
     }
     if (data->file_data) {
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
     }
     free(data->left_buf);
     free(data->right_buf);
@@ -184,13 +185,13 @@ static int furnace_open(void* user_data, const char* url, uint32_t subsong, cons
         data->playing = false;
     }
     if (data->file_data) {
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
         data->file_data = nullptr;
     }
 
     // Load file
     RVIoReadUrlResult read_res;
-    if ((read_res = RVIo_read_url_to_memory(g_io_api, url)).data == nullptr) {
+    if ((read_res = rv_io_read_url_to_memory(url)).data == nullptr) {
         rv_error("Furnace: Failed to load %s", url);
         return -1;
     }
@@ -242,7 +243,7 @@ static void furnace_close(void* user_data) {
     }
 
     if (data->file_data) {
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
         data->file_data = nullptr;
     }
 
@@ -314,15 +315,10 @@ static int64_t furnace_seek(void* user_data, int64_t ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int furnace_metadata(const char* url, const RVService* service_api) {
-    const RVIo* io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
-
-    if (!io_api || !metadata_api) {
-        return -1;
-    }
+    (void)service_api;
 
     RVIoReadUrlResult read_res;
-    if ((read_res = RVIo_read_url_to_memory(io_api, url)).data == nullptr) {
+    if ((read_res = rv_io_read_url_to_memory(url)).data == nullptr) {
         return -1;
     }
 
@@ -332,38 +328,38 @@ static int furnace_metadata(const char* url, const RVService* service_api) {
 
     uint8_t* load_data = (uint8_t*)malloc(read_res.data_size);
     if (!load_data) {
-        RVIo_free_url_to_memory(io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
     memcpy(load_data, read_res.data, read_res.data_size);
 
     if (!engine.load(load_data, read_res.data_size)) {
         free(load_data);
-        RVIo_free_url_to_memory(io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
-    RVMetadataId id = RVMetadata_create_url(metadata_api, url);
+    RVMetadataId id = rv_metadata_create_url(url);
 
     if (!engine.song.name.empty()) {
-        RVMetadata_set_tag(metadata_api, id, RV_METADATA_TITLE_TAG, engine.song.name.c_str());
+        rv_metadata_set_tag(id, RV_METADATA_TITLE_TAG, engine.song.name.c_str());
     }
     if (!engine.song.author.empty()) {
-        RVMetadata_set_tag(metadata_api, id, RV_METADATA_ARTIST_TAG, engine.song.author.c_str());
+        rv_metadata_set_tag(id, RV_METADATA_ARTIST_TAG, engine.song.author.c_str());
     }
-    RVMetadata_set_tag(metadata_api, id, RV_METADATA_SONGTYPE_TAG, "Furnace");
+    rv_metadata_set_tag(id, RV_METADATA_SONGTYPE_TAG, "Furnace");
 
     // Report subsongs
     size_t subsong_count = engine.song.subsong.size();
     if (subsong_count > 1) {
         for (size_t i = 0; i < subsong_count; i++) {
             const char* name = engine.song.subsong[i]->name.c_str();
-            RVMetadata_add_subsong(metadata_api, id, (uint32_t)i, name, 0.0f);
+            rv_metadata_add_subsong(id, (uint32_t)i, name, 0.0f);
         }
     }
 
     engine.quit(false);
-    RVIo_free_url_to_memory(io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
 
     return 0;
 }

@@ -34,8 +34,9 @@
 
 #define OUTPUT_SAMPLE_RATE 48000
 
-static const RVIo* g_io_api = nullptr;
-const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_IO_API();
+RV_PLUGIN_USE_LOG_API();
+RV_PLUGIN_USE_METADATA_API();
 
 static int g_sc68_initialized = 0;
 
@@ -80,8 +81,6 @@ static void* sc68_plugin_create(const RVService* service_api) {
     // Set PCM format to 16-bit signed (we'll convert to F32)
     sc68_cntl(data->sc68, SC68_SET_PCM, SC68_PCM_S16);
 
-    g_io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-
     return data;
 }
 
@@ -105,7 +104,7 @@ static int sc68_plugin_open(void* user_data, const char* url, uint32_t subsong, 
 
     RVIoReadUrlResult read_res;
 
-    if ((read_res = RVIo_read_url_to_memory(g_io_api, url)).data == nullptr) {
+    if ((read_res = rv_io_read_url_to_memory(url)).data == nullptr) {
         rv_error("SC68: Failed to load %s to memory", url);
         return -1;
     }
@@ -118,7 +117,7 @@ static int sc68_plugin_open(void* user_data, const char* url, uint32_t subsong, 
     // Load from memory
     if (sc68_load_mem(data->sc68, read_res.data, (int)read_res.data_size) != 0) {
         rv_error("SC68: Failed to parse %s: %s", url, sc68_error(data->sc68));
-        RVIo_free_url_to_memory(g_io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
@@ -153,11 +152,11 @@ static int sc68_plugin_open(void* user_data, const char* url, uint32_t subsong, 
     rv_debug("SC68: sc68_play() returned %d", play_result);
     if (play_result < 0) {
         rv_error("SC68: Failed to start playback of track %d: %s", track, sc68_error(data->sc68));
-        RVIo_free_url_to_memory(g_io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
-    RVIo_free_url_to_memory(g_io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
     return 0;
 }
 
@@ -255,16 +254,10 @@ static int64_t sc68_plugin_seek(void* user_data, int64_t ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int sc68_plugin_metadata(const char* url, const RVService* service_api) {
+    (void)service_api;
     RVIoReadUrlResult read_res;
 
-    const RVIo* io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
-
-    if (io_api == nullptr || metadata_api == nullptr) {
-        return -1;
-    }
-
-    if ((read_res = RVIo_read_url_to_memory(io_api, url)).data == nullptr) {
+    if ((read_res = rv_io_read_url_to_memory(url)).data == nullptr) {
         rv_error("SC68: Failed to load %s to memory for metadata", url);
         return -1;
     }
@@ -277,17 +270,17 @@ static int sc68_plugin_metadata(const char* url, const RVService* service_api) {
     sc68_t* sc68 = sc68_create(&create_params);
     if (sc68 == nullptr) {
         rv_error("SC68: Failed to create sc68 instance for metadata extraction");
-        RVIo_free_url_to_memory(io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
     if (sc68_load_mem(sc68, read_res.data, (int)read_res.data_size) != 0) {
         sc68_destroy(sc68);
-        RVIo_free_url_to_memory(io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
-    RVMetadataId index = RVMetadata_create_url(metadata_api, url);
+    RVMetadataId index = rv_metadata_create_url(url);
 
     sc68_music_info_t info;
     memset(&info, 0, sizeof(info));
@@ -296,14 +289,14 @@ static int sc68_plugin_metadata(const char* url, const RVService* service_api) {
     if (sc68_music_info(sc68, &info, -1, nullptr) == 0) {
         // Set title from track title or album
         if (info.title && info.title[0] != '\0') {
-            RVMetadata_set_tag(metadata_api, index, RV_METADATA_TITLE_TAG, info.title);
+            rv_metadata_set_tag(index, RV_METADATA_TITLE_TAG, info.title);
         } else if (info.album && info.album[0] != '\0') {
-            RVMetadata_set_tag(metadata_api, index, RV_METADATA_TITLE_TAG, info.album);
+            rv_metadata_set_tag(index, RV_METADATA_TITLE_TAG, info.album);
         }
 
         // Set artist
         if (info.artist && info.artist[0] != '\0') {
-            RVMetadata_set_tag(metadata_api, index, RV_METADATA_ARTIST_TAG, info.artist);
+            rv_metadata_set_tag(index, RV_METADATA_ARTIST_TAG, info.artist);
         }
 
         // Set song type based on hardware
@@ -311,14 +304,14 @@ static int sc68_plugin_metadata(const char* url, const RVService* service_api) {
         if (hw && hw[0] != '\0') {
             char songtype[64];
             snprintf(songtype, sizeof(songtype), "SC68 (%s)", hw);
-            RVMetadata_set_tag(metadata_api, index, RV_METADATA_SONGTYPE_TAG, songtype);
+            rv_metadata_set_tag(index, RV_METADATA_SONGTYPE_TAG, songtype);
         } else {
-            RVMetadata_set_tag(metadata_api, index, RV_METADATA_SONGTYPE_TAG, "SC68 (Atari ST/Amiga)");
+            rv_metadata_set_tag(index, RV_METADATA_SONGTYPE_TAG, "SC68 (Atari ST/Amiga)");
         }
 
         // Set duration
         if (info.trk.time_ms > 0) {
-            RVMetadata_set_tag_f64(metadata_api, index, RV_METADATA_LENGTH_TAG, info.trk.time_ms / 1000.0);
+            rv_metadata_set_tag_f64(index, RV_METADATA_LENGTH_TAG, info.trk.time_ms / 1000.0);
         }
 
         // Add subsongs if more than one
@@ -330,7 +323,7 @@ static int sc68_plugin_metadata(const char* url, const RVService* service_api) {
                 if (sc68_music_info(sc68, &track_info, i, nullptr) == 0) {
                     float length = track_info.trk.time_ms > 0 ? track_info.trk.time_ms / 1000.0f : 0.0f;
                     const char* track_title = (track_info.title && track_info.title[0]) ? track_info.title : "";
-                    RVMetadata_add_subsong(metadata_api, index, i, track_title, length);
+                    rv_metadata_add_subsong(index, i, track_title, length);
                 }
             }
         }
@@ -338,7 +331,7 @@ static int sc68_plugin_metadata(const char* url, const RVService* service_api) {
 
     sc68_close(sc68);
     sc68_destroy(sc68);
-    RVIo_free_url_to_memory(io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
 
     return 0;
 }
@@ -398,7 +391,9 @@ static vfs68_t* sc68_embedded_resource_handler(rsc68_t type, const char* name, i
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void sc68_plugin_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    rv_init_log_api(service_api);
+    rv_init_io_api(service_api);
+    rv_init_metadata_api(service_api);
 
     // Initialize SC68 library (only once)
     if (!g_sc68_initialized) {

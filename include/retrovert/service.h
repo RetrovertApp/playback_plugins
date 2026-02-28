@@ -36,6 +36,12 @@ typedef struct RVService {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#define rv_init_io_api(service) g_rv_io = RVService_get_io(service, RV_IO_API_VERSION)
+#define rv_init_log_api(service) g_rv_log = RVService_get_log(service, RV_LOG_API_VERSION)
+#define rv_init_metadata_api(service) g_rv_metadata = RVService_get_metadata(service, RV_METADATA_API_VERSION)
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 #ifdef __cplusplus
 }
 #endif

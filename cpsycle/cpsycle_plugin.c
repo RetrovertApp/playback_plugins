@@ -47,8 +47,9 @@
 #define OUTPUT_SAMPLE_RATE 48000
 #define RENDER_BLOCK_SIZE 2048
 
-static const RVIo* g_io_api = nullptr;
-const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_IO_API();
+RV_PLUGIN_USE_METADATA_API();
+RV_PLUGIN_USE_LOG_API();
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -77,8 +78,6 @@ static void* cpsycle_plugin_create(const RVService* service_api) {
         return nullptr;
     }
     memset(data, 0, sizeof(CpsycleReplayerData));
-
-    g_io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
 
     return data;
 }
@@ -183,7 +182,7 @@ static int cpsycle_plugin_open(void* user_data, const char* url, uint32_t subson
     CpsycleReplayerData* data = (CpsycleReplayerData*)user_data;
 
     // Read file into memory via the I/O API
-    RVIoReadUrlResult read_res = RVIo_read_url_to_memory(g_io_api, url);
+    RVIoReadUrlResult read_res = rv_io_read_url_to_memory(url);
     if (read_res.data == nullptr) {
         rv_error("cpsycle: Failed to load %s to memory", url);
         return -1;
@@ -192,11 +191,11 @@ static int cpsycle_plugin_open(void* user_data, const char* url, uint32_t subson
     // Write to temp file (cpsycle needs a filesystem path)
     if (write_temp_file(data, read_res.data, read_res.data_size) != 0) {
         rv_error("cpsycle: Failed to create temp file for %s", url);
-        RVIo_free_url_to_memory(g_io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
-    RVIo_free_url_to_memory(g_io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
 
     // Initialize the audio subsystem
     psy_audio_init();
@@ -357,19 +356,14 @@ static int64_t cpsycle_plugin_seek(void* user_data, int64_t ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int cpsycle_plugin_metadata(const char* url, const RVService* service_api) {
-    const RVIo* io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
+    (void)service_api;
 
-    if (io_api == nullptr || metadata_api == nullptr) {
-        return -1;
-    }
-
-    RVIoReadUrlResult read_res = RVIo_read_url_to_memory(io_api, url);
+    RVIoReadUrlResult read_res = rv_io_read_url_to_memory(url);
     if (read_res.data == nullptr) {
         return -1;
     }
 
-    RVMetadataId index = RVMetadata_create_url(metadata_api, url);
+    RVMetadataId index = rv_metadata_create_url(url);
 
     // Extract title from PSY3 header if possible
     // PSY3 format: 8 bytes magic "PSY3SONG", then chunks
@@ -377,13 +371,13 @@ static int cpsycle_plugin_metadata(const char* url, const RVService* service_api
     // loading the full song which is expensive
     if (read_res.data_size >= 8) {
         if (memcmp(read_res.data, "PSY3SONG", 8) == 0) {
-            RVMetadata_set_tag(metadata_api, index, RV_METADATA_SONGTYPE_TAG, "Psycle 3");
+            rv_metadata_set_tag(index, RV_METADATA_SONGTYPE_TAG, "Psycle 3");
         } else if (memcmp(read_res.data, "PSY2SONG", 8) == 0) {
-            RVMetadata_set_tag(metadata_api, index, RV_METADATA_SONGTYPE_TAG, "Psycle 2");
+            rv_metadata_set_tag(index, RV_METADATA_SONGTYPE_TAG, "Psycle 2");
         }
     }
 
-    RVIo_free_url_to_memory(io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
     return 0;
 }
 
@@ -398,7 +392,9 @@ static void cpsycle_plugin_event(void* user_data, uint8_t* event_data, uint64_t 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void cpsycle_plugin_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    rv_init_log_api(service_api);
+    rv_init_io_api(service_api);
+    rv_init_metadata_api(service_api);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

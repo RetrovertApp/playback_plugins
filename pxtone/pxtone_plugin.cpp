@@ -27,8 +27,9 @@ extern "C" {
 #define PXTONE_SAMPLE_RATE 48000
 #define PXTONE_CHANNELS 2
 
-static const RVIo* g_io_api = nullptr;
-const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_IO_API();
+RV_PLUGIN_USE_METADATA_API();
+RV_PLUGIN_USE_LOG_API();
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Memory-based I/O bridge for pxtnService
@@ -117,7 +118,9 @@ static const char* pxtone_supported_extensions(void) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void pxtone_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    rv_init_log_api(service_api);
+    rv_init_io_api(service_api);
+    rv_init_metadata_api(service_api);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -127,8 +130,6 @@ static void* pxtone_create(const RVService* service_api) {
     if (!data) {
         return nullptr;
     }
-
-    g_io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
 
     data->pxtn = new (std::nothrow) pxtnService(pxtone_io_read, pxtone_io_write, pxtone_io_seek, pxtone_io_pos);
     if (!data->pxtn) {
@@ -156,7 +157,7 @@ static int pxtone_destroy(void* user_data) {
         delete data->pxtn;
     }
     if (data->file_data) {
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
     }
     free(data);
     return 0;
@@ -194,12 +195,12 @@ static int pxtone_open(void* user_data, const char* url, uint32_t subsong, const
 
     // Free previous file data
     if (data->file_data) {
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
         data->file_data = nullptr;
     }
 
     RVIoReadUrlResult read_res;
-    if ((read_res = RVIo_read_url_to_memory(g_io_api, url)).data == nullptr) {
+    if ((read_res = rv_io_read_url_to_memory(url)).data == nullptr) {
         rv_error("PxTone: Failed to load %s", url);
         return -1;
     }
@@ -215,7 +216,7 @@ static int pxtone_open(void* user_data, const char* url, uint32_t subsong, const
     // Set output quality
     if (!data->pxtn->set_destination_quality(PXTONE_CHANNELS, PXTONE_SAMPLE_RATE)) {
         rv_error("PxTone: Failed to set output quality");
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
         data->file_data = nullptr;
         return -1;
     }
@@ -226,7 +227,7 @@ static int pxtone_open(void* user_data, const char* url, uint32_t subsong, const
     if (err != pxtnOK) {
         rv_error("PxTone: Failed to read %s: %s", url, pxtnError_get_string(err));
         data->pxtn->clear();
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
         data->file_data = nullptr;
         return -1;
     }
@@ -236,7 +237,7 @@ static int pxtone_open(void* user_data, const char* url, uint32_t subsong, const
     if (err != pxtnOK) {
         rv_error("PxTone: tones_ready failed for %s: %s", url, pxtnError_get_string(err));
         data->pxtn->clear();
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
         data->file_data = nullptr;
         return -1;
     }
@@ -250,7 +251,7 @@ static int pxtone_open(void* user_data, const char* url, uint32_t subsong, const
     if (!data->pxtn->moo_preparation(&prep)) {
         rv_error("PxTone: moo_preparation failed for %s", url);
         data->pxtn->clear();
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
         data->file_data = nullptr;
         return -1;
     }
@@ -269,7 +270,7 @@ static void pxtone_close(void* user_data) {
     data->pxtn->clear();
 
     if (data->file_data) {
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
         data->file_data = nullptr;
     }
     data->finished = false;
@@ -346,26 +347,21 @@ static int64_t pxtone_seek(void* user_data, int64_t ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int pxtone_metadata(const char* url, const RVService* service_api) {
-    const RVIo* io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
-
-    if (!io_api || !metadata_api) {
-        return -1;
-    }
+    (void)service_api;
 
     RVIoReadUrlResult read_res;
-    if ((read_res = RVIo_read_url_to_memory(io_api, url)).data == nullptr) {
+    if ((read_res = rv_io_read_url_to_memory(url)).data == nullptr) {
         return -1;
     }
 
-    RVMetadataId id = RVMetadata_create_url(metadata_api, url);
-    RVMetadata_set_tag(metadata_api, id, RV_METADATA_SONGTYPE_TAG, "PxTone");
+    RVMetadataId id = rv_metadata_create_url(url);
+    rv_metadata_set_tag(id, RV_METADATA_SONGTYPE_TAG, "PxTone");
 
     // Create a temporary pxtnService to extract metadata
     pxtnService pxtn(pxtone_io_read, pxtone_io_write, pxtone_io_seek, pxtone_io_pos);
     pxtnERR err = pxtn.init();
     if (err != pxtnOK) {
-        RVIo_free_url_to_memory(io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
@@ -382,7 +378,7 @@ static int pxtone_metadata(const char* url, const RVService* service_api) {
             char title[256] = { 0 };
             int copy_len = name_size < 255 ? name_size : 255;
             memcpy(title, name, (size_t)copy_len);
-            RVMetadata_set_tag(metadata_api, id, RV_METADATA_TITLE_TAG, title);
+            rv_metadata_set_tag(id, RV_METADATA_TITLE_TAG, title);
         }
 
         // Calculate duration
@@ -396,13 +392,13 @@ static int pxtone_metadata(const char* url, const RVService* service_api) {
             int32_t total = pxtn.moo_get_total_sample();
             if (total > 0) {
                 double length = (double)total / (double)PXTONE_SAMPLE_RATE;
-                RVMetadata_set_tag_f64(metadata_api, id, RV_METADATA_LENGTH_TAG, length);
+                rv_metadata_set_tag_f64(id, RV_METADATA_LENGTH_TAG, length);
             }
         }
     }
 
     pxtn.clear();
-    RVIo_free_url_to_memory(io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
     return 0;
 }
 

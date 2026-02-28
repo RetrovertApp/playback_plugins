@@ -36,8 +36,9 @@ extern "C" {
 #define V2M_SAMPLE_RATE 44100
 #define V2M_CHANNELS 2
 
-static const RVIo* g_io_api = nullptr;
-const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_IO_API();
+RV_PLUGIN_USE_METADATA_API();
+RV_PLUGIN_USE_LOG_API();
 static bool g_sd_initialized = false;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -61,7 +62,9 @@ static const char* v2m_supported_extensions(void) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void v2m_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    rv_init_log_api(service_api);
+    rv_init_io_api(service_api);
+    rv_init_metadata_api(service_api);
 
     if (!g_sd_initialized) {
         sdInit();
@@ -76,8 +79,6 @@ static void* v2m_create(const RVService* service_api) {
     if (!data) {
         return nullptr;
     }
-
-    g_io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
 
     // V2MPlayer has a 3MB internal synth buffer, must be heap-allocated
     data->player = new (std::nothrow) V2MPlayer();
@@ -102,7 +103,7 @@ static int v2m_destroy(void* user_data) {
         free(data->converted_data);
     }
     if (data->raw_data) {
-        RVIo_free_url_to_memory(g_io_api, data->raw_data);
+        rv_io_free_url_to_memory(data->raw_data);
     }
     if (data->player) {
         delete data->player;
@@ -168,12 +169,12 @@ static int v2m_open(void* user_data, const char* url, uint32_t subsong, const RV
         data->converted_data = nullptr;
     }
     if (data->raw_data) {
-        RVIo_free_url_to_memory(g_io_api, data->raw_data);
+        rv_io_free_url_to_memory(data->raw_data);
         data->raw_data = nullptr;
     }
 
     RVIoReadUrlResult read_res;
-    if ((read_res = RVIo_read_url_to_memory(g_io_api, url)).data == nullptr) {
+    if ((read_res = rv_io_read_url_to_memory(url)).data == nullptr) {
         rv_error("V2M: Failed to load %s", url);
         return -1;
     }
@@ -186,7 +187,7 @@ static int v2m_open(void* user_data, const char* url, uint32_t subsong, const RV
     ConvertV2M(data->raw_data, (int)read_res.data_size, &conv_ptr, &conv_len);
     if (!conv_ptr || conv_len <= 0) {
         rv_error("V2M: ConvertV2M failed for %s", url);
-        RVIo_free_url_to_memory(g_io_api, data->raw_data);
+        rv_io_free_url_to_memory(data->raw_data);
         data->raw_data = nullptr;
         return -1;
     }
@@ -199,7 +200,7 @@ static int v2m_open(void* user_data, const char* url, uint32_t subsong, const RV
         rv_error("V2M: Open failed for %s", url);
         free(data->converted_data);
         data->converted_data = nullptr;
-        RVIo_free_url_to_memory(g_io_api, data->raw_data);
+        rv_io_free_url_to_memory(data->raw_data);
         data->raw_data = nullptr;
         return -1;
     }
@@ -225,7 +226,7 @@ static void v2m_close(void* user_data) {
         data->converted_data = nullptr;
     }
     if (data->raw_data) {
-        RVIo_free_url_to_memory(g_io_api, data->raw_data);
+        rv_io_free_url_to_memory(data->raw_data);
         data->raw_data = nullptr;
     }
 }
@@ -283,20 +284,15 @@ static int64_t v2m_seek(void* user_data, int64_t ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int v2m_metadata(const char* url, const RVService* service_api) {
-    const RVIo* io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
-
-    if (!io_api || !metadata_api) {
-        return -1;
-    }
+    (void)service_api;
 
     RVIoReadUrlResult read_res;
-    if ((read_res = RVIo_read_url_to_memory(io_api, url)).data == nullptr) {
+    if ((read_res = rv_io_read_url_to_memory(url)).data == nullptr) {
         return -1;
     }
 
-    RVMetadataId id = RVMetadata_create_url(metadata_api, url);
-    RVMetadata_set_tag(metadata_api, id, RV_METADATA_SONGTYPE_TAG, "V2M");
+    RVMetadataId id = rv_metadata_create_url(url);
+    rv_metadata_set_tag(id, RV_METADATA_SONGTYPE_TAG, "V2M");
 
     // Convert to get duration
     uint8_t* conv_ptr = nullptr;
@@ -308,14 +304,14 @@ static int v2m_metadata(const char* url, const RVService* service_api) {
         if (player.Open(conv_ptr, V2M_SAMPLE_RATE)) {
             uint32_t length_s = player.Length();
             if (length_s > 0) {
-                RVMetadata_set_tag_f64(metadata_api, id, RV_METADATA_LENGTH_TAG, (double)length_s);
+                rv_metadata_set_tag_f64(id, RV_METADATA_LENGTH_TAG, (double)length_s);
             }
             player.Close();
         }
         free(conv_ptr);
     }
 
-    RVIo_free_url_to_memory(io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
     return 0;
 }
 

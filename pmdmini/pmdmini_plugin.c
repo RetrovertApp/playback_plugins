@@ -31,7 +31,8 @@
 
 #define PMD_SAMPLE_RATE 44100
 
-const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_LOG_API();
+RV_PLUGIN_USE_METADATA_API();
 static int g_pmd_initialized = 0;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -220,11 +221,7 @@ static int64_t pmdmini_plugin_seek(void* user_data, int64_t ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int pmdmini_plugin_metadata(const char* url, const RVService* service_api) {
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
-
-    if (metadata_api == nullptr) {
-        return -1;
-    }
+    (void)service_api;
 
     // Extract directory for PCM sample loading
     char dir[2048];
@@ -235,14 +232,14 @@ static int pmdmini_plugin_metadata(const char* url, const RVService* service_api
         return -1;
     }
 
-    RVMetadataId index = RVMetadata_create_url(metadata_api, url);
+    RVMetadataId index = rv_metadata_create_url(url);
 
     // Get title (may be Shift-JIS encoded)
     char title[256];
     memset(title, 0, sizeof(title));
     pmd_get_title(title);
     if (title[0] != '\0') {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_TITLE_TAG, title);
+        rv_metadata_set_tag(index, RV_METADATA_TITLE_TAG, title);
     }
 
     // Get composer (may be Shift-JIS encoded)
@@ -250,17 +247,17 @@ static int pmdmini_plugin_metadata(const char* url, const RVService* service_api
     memset(composer, 0, sizeof(composer));
     pmd_get_compo(composer);
     if (composer[0] != '\0') {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_ARTIST_TAG, composer);
+        rv_metadata_set_tag(index, RV_METADATA_ARTIST_TAG, composer);
     }
 
     // Set song type
-    RVMetadata_set_tag(metadata_api, index, RV_METADATA_SONGTYPE_TAG, "PMD");
-    RVMetadata_set_tag(metadata_api, index, RV_METADATA_AUTHORINGTOOL_TAG, "NEC PC-98");
+    rv_metadata_set_tag(index, RV_METADATA_SONGTYPE_TAG, "PMD");
+    rv_metadata_set_tag(index, RV_METADATA_AUTHORINGTOOL_TAG, "NEC PC-98");
 
     // Get duration
     int length = pmd_length_sec();
     if (length > 0) {
-        RVMetadata_set_tag_f64(metadata_api, index, RV_METADATA_LENGTH_TAG, (double)length);
+        rv_metadata_set_tag_f64(index, RV_METADATA_LENGTH_TAG, (double)length);
     }
 
     pmd_stop();
@@ -278,7 +275,8 @@ static void pmdmini_plugin_event(void* user_data, uint8_t* event_data, uint64_t 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void pmdmini_plugin_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    rv_init_log_api(service_api);
+    rv_init_metadata_api(service_api);
 
     if (!g_pmd_initialized) {
         pmd_init();

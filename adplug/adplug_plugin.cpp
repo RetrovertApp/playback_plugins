@@ -24,8 +24,9 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Module-local globals for API access
 
-static const RVIo* g_io_api = nullptr;
-const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_IO_API();
+RV_PLUGIN_USE_METADATA_API();
+RV_PLUGIN_USE_LOG_API();
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Constants
@@ -224,8 +225,6 @@ static void* adplug_create(const RVService* service_api) {
     }
     memset(data, 0, sizeof(AdplugData));
 
-    g_io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-
     // Create OPL emulator: 48kHz, 16-bit, stereo
     data->opl = new CEmuopl(SAMPLE_RATE, true, true);
     data->sample_rate = SAMPLE_RATE;
@@ -266,7 +265,7 @@ static int adplug_destroy(void* user_data) {
     }
 
     if (data->file_data != nullptr) {
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
         data->file_data = nullptr;
     }
 
@@ -288,7 +287,7 @@ static int adplug_open(void* user_data, const char* url, uint32_t subsong, const
     }
 
     if (data->file_data != nullptr) {
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
         data->file_data = nullptr;
     }
 
@@ -298,7 +297,7 @@ static int adplug_open(void* user_data, const char* url, uint32_t subsong, const
     data->current_subsong = subsong;
 
     // Load file into memory
-    RVIoReadUrlResult read_res = RVIo_read_url_to_memory(g_io_api, url);
+    RVIoReadUrlResult read_res = rv_io_read_url_to_memory(url);
     if (read_res.data == nullptr) {
         rv_error("adplug: Failed to load file: %s", url);
         return -1;
@@ -317,7 +316,7 @@ static int adplug_open(void* user_data, const char* url, uint32_t subsong, const
     data->player = CAdPlug::factory(url, data->opl, CAdPlug::players, provider);
     if (data->player == nullptr) {
         rv_error("adplug: Failed to create player for: %s", url);
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
         data->file_data = nullptr;
         return -1;
     }
@@ -352,7 +351,7 @@ static void adplug_close(void* user_data) {
     }
 
     if (data->file_data != nullptr) {
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
         data->file_data = nullptr;
     }
 
@@ -467,15 +466,10 @@ static int64_t adplug_seek(void* user_data, int64_t ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int adplug_metadata(const char* url, const RVService* service_api) {
-    const RVIo* io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
-
-    if (io_api == nullptr || metadata_api == nullptr) {
-        return -1;
-    }
+    (void)service_api;
 
     // Load file
-    RVIoReadUrlResult read_res = RVIo_read_url_to_memory(io_api, url);
+    RVIoReadUrlResult read_res = rv_io_read_url_to_memory(url);
     if (read_res.data == nullptr) {
         rv_error("adplug: Failed to load file for metadata: %s", url);
         return -1;
@@ -488,39 +482,39 @@ static int adplug_metadata(const char* url, const RVService* service_api) {
     // Create player
     CPlayer* player = CAdPlug::factory(url, &opl, CAdPlug::players, provider);
     if (player == nullptr) {
-        RVIo_free_url_to_memory(io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
     // Create metadata entry
-    RVMetadataId index = RVMetadata_create_url(metadata_api, url);
+    RVMetadataId index = rv_metadata_create_url(url);
 
     // Extract metadata
     std::string title = player->gettitle();
     if (!title.empty()) {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_TITLE_TAG, title.c_str());
+        rv_metadata_set_tag(index, RV_METADATA_TITLE_TAG, title.c_str());
     }
 
     std::string author = player->getauthor();
     if (!author.empty()) {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_ARTIST_TAG, author.c_str());
+        rv_metadata_set_tag(index, RV_METADATA_ARTIST_TAG, author.c_str());
     }
 
     std::string desc = player->getdesc();
     if (!desc.empty()) {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_MESSAGE_TAG, desc.c_str());
+        rv_metadata_set_tag(index, RV_METADATA_MESSAGE_TAG, desc.c_str());
     }
 
     std::string type = player->gettype();
     if (!type.empty()) {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_SONGTYPE_TAG, type.c_str());
+        rv_metadata_set_tag(index, RV_METADATA_SONGTYPE_TAG, type.c_str());
     }
 
     // Get song length (in milliseconds, convert to seconds)
     unsigned long length_ms = player->songlength(-1);
     if (length_ms > 0) {
         double length_sec = static_cast<double>(length_ms) / 1000.0;
-        RVMetadata_set_tag_f64(metadata_api, index, RV_METADATA_LENGTH_TAG, length_sec);
+        rv_metadata_set_tag_f64(index, RV_METADATA_LENGTH_TAG, length_sec);
     }
 
     // Handle subsongs
@@ -530,7 +524,7 @@ static int adplug_metadata(const char* url, const RVService* service_api) {
             player->rewind(static_cast<int>(i));
             unsigned long subsong_len = player->songlength(static_cast<int>(i));
             float len_sec = static_cast<float>(subsong_len) / 1000.0f;
-            RVMetadata_add_subsong(metadata_api, index, i, "", len_sec);
+            rv_metadata_add_subsong(index, i, "", len_sec);
         }
     }
 
@@ -539,12 +533,12 @@ static int adplug_metadata(const char* url, const RVService* service_api) {
     for (unsigned int i = 0; i < num_instruments && i < 32; i++) {
         std::string inst_name = player->getinstrument(i);
         if (!inst_name.empty()) {
-            RVMetadata_add_instrument(metadata_api, index, inst_name.c_str());
+            rv_metadata_add_instrument(index, inst_name.c_str());
         }
     }
 
     delete player;
-    RVIo_free_url_to_memory(io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
 
     return 0;
 }
@@ -577,7 +571,9 @@ static void adplug_event(void* user_data, uint8_t* event_data, uint64_t len) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void adplug_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    rv_init_log_api(service_api);
+    rv_init_io_api(service_api);
+    rv_init_metadata_api(service_api);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

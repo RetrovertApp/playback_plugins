@@ -41,8 +41,9 @@ struct pcm_struct pcm;
 // Default song length: 5 minutes (Euphony files don't embed duration)
 #define DEFAULT_LENGTH_MS (5 * 60 * 1000)
 
-static const RVIo* g_io_api = nullptr;
-extern "C" const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_IO_API();
+RV_PLUGIN_USE_METADATA_API();
+extern "C" { RV_PLUGIN_USE_LOG_API(); }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -73,7 +74,6 @@ static void* eupmini_plugin_create(const RVService* service_api) {
         return nullptr;
     }
 
-    g_io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
     return data;
 }
 
@@ -120,7 +120,7 @@ static int eupmini_plugin_open(void* user_data, const char* url, uint32_t subson
     data->mem_read_pos = 0;
     data->file_open = 0;
 
-    RVIoReadUrlResult read_res = RVIo_read_url_to_memory(g_io_api, url);
+    RVIoReadUrlResult read_res = rv_io_read_url_to_memory(url);
     if (read_res.data == nullptr) {
         rv_error("eupmini: Failed to load %s to memory", url);
         return -1;
@@ -129,19 +129,19 @@ static int eupmini_plugin_open(void* user_data, const char* url, uint32_t subson
     // EUP files need at least the 2048-byte header
     if (read_res.data_size < EUP_HEADER_SIZE + 6) {
         rv_error("eupmini: File too small for EUP format: %s", url);
-        RVIo_free_url_to_memory(g_io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
     // Keep a copy of the file data
     data->file_data = (uint8_t*)malloc((size_t)read_res.data_size);
     if (data->file_data == nullptr) {
-        RVIo_free_url_to_memory(g_io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
     memcpy(data->file_data, read_res.data, (size_t)read_res.data_size);
     data->file_size = (size_t)read_res.data_size;
-    RVIo_free_url_to_memory(g_io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
 
     uint8_t* buf = data->file_data;
 
@@ -322,22 +322,17 @@ static int64_t eupmini_plugin_seek(void* user_data, int64_t ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int eupmini_plugin_metadata(const char* url, const RVService* service_api) {
-    const RVIo* io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
+    (void)service_api;
 
-    if (io_api == nullptr || metadata_api == nullptr) {
-        return -1;
-    }
-
-    RVIoReadUrlResult read_res = RVIo_read_url_to_memory(io_api, url);
+    RVIoReadUrlResult read_res = rv_io_read_url_to_memory(url);
     if (read_res.data == nullptr || read_res.data_size < EUP_HEADER_SIZE) {
         if (read_res.data != nullptr) {
-            RVIo_free_url_to_memory(io_api, read_res.data);
+            rv_io_free_url_to_memory(read_res.data);
         }
         return -1;
     }
 
-    RVMetadataId index = RVMetadata_create_url(metadata_api, url);
+    RVMetadataId index = rv_metadata_create_url(url);
 
     // Extract title from header (32 bytes at offset 0)
     char title[33];
@@ -348,14 +343,14 @@ static int eupmini_plugin_metadata(const char* url, const RVService* service_api
         title[i] = '\0';
     }
     if (title[0] != '\0') {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_TITLE_TAG, title);
+        rv_metadata_set_tag(index, RV_METADATA_TITLE_TAG, title);
     }
 
-    RVMetadata_set_tag(metadata_api, index, RV_METADATA_SONGTYPE_TAG, "Euphony");
-    RVMetadata_set_tag(metadata_api, index, RV_METADATA_AUTHORINGTOOL_TAG, "FM TOWNS");
-    RVMetadata_set_tag_f64(metadata_api, index, RV_METADATA_LENGTH_TAG, DEFAULT_LENGTH_MS / 1000.0);
+    rv_metadata_set_tag(index, RV_METADATA_SONGTYPE_TAG, "Euphony");
+    rv_metadata_set_tag(index, RV_METADATA_AUTHORINGTOOL_TAG, "FM TOWNS");
+    rv_metadata_set_tag_f64(index, RV_METADATA_LENGTH_TAG, DEFAULT_LENGTH_MS / 1000.0);
 
-    RVIo_free_url_to_memory(io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
     return 0;
 }
 
@@ -370,7 +365,9 @@ static void eupmini_plugin_event(void* user_data, uint8_t* event_data, uint64_t 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void eupmini_plugin_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    rv_init_log_api(service_api);
+    rv_init_io_api(service_api);
+    rv_init_metadata_api(service_api);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

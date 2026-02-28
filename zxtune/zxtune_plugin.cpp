@@ -44,8 +44,9 @@
 
 #define FREQ 48000
 
-static const RVIo* g_io_api = nullptr;
-const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_IO_API();
+RV_PLUGIN_USE_METADATA_API();
+RV_PLUGIN_USE_LOG_API();
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Module detection callback for finding modules in containers
@@ -97,9 +98,8 @@ struct ZXTuneData {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Helper to load file and detect modules - avoids duplication between open and metadata
 
-static bool load_and_detect_modules(const char* url, const ZXTune::Service& service, ModulesDetector& detector,
-                                    const RVIo* io_api) {
-    RVIoReadUrlResult read_res = RVIo_read_url_to_memory(io_api, url);
+static bool load_and_detect_modules(const char* url, const ZXTune::Service& service, ModulesDetector& detector) {
+    RVIoReadUrlResult read_res = rv_io_read_url_to_memory(url);
     if (read_res.data == nullptr) {
         rv_error("Failed to load %s to memory", url);
         return false;
@@ -107,7 +107,7 @@ static bool load_and_detect_modules(const char* url, const ZXTune::Service& serv
 
     auto dump = std::make_unique<Binary::Dump>(read_res.data_size);
     std::memcpy(dump->data(), read_res.data, read_res.data_size);
-    RVIo_free_url_to_memory(io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
 
     auto container = Binary::CreateContainer(std::move(dump));
     if (!container) {
@@ -169,8 +169,6 @@ static void* zxtune_create(const RVService* service_api) {
     data->current_subsong = 0;
     data->scope_enabled = false;
 
-    g_io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-
     return data;
 }
 
@@ -195,7 +193,7 @@ static int zxtune_open(void* user_data, const char* url, uint32_t subsong, const
     data->chunk = Sound::Chunk();
     data->chunk_offset = 0;
 
-    if (!load_and_detect_modules(url, *data->service, data->detector, g_io_api)) {
+    if (!load_and_detect_modules(url, *data->service, data->detector)) {
         return -1;
     }
 
@@ -372,24 +370,19 @@ static int64_t zxtune_seek(void* user_data, int64_t ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int zxtune_metadata(const char* url, const RVService* service_api) {
-    const RVIo* io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
-
-    if (io_api == nullptr || metadata_api == nullptr) {
-        return -1;
-    }
+    (void)service_api;
 
     // Create temporary service and detector for metadata extraction
     auto service = ZXTune::Service::Create(Parameters::Container::Create());
     ModulesDetector detector;
 
-    if (!load_and_detect_modules(url, *service, detector, io_api)) {
+    if (!load_and_detect_modules(url, *service, detector)) {
         return -1;
     }
 
     const auto& modules = detector.GetModules();
 
-    RVMetadataId index = RVMetadata_create_url(metadata_api, url);
+    RVMetadataId index = rv_metadata_create_url(url);
 
     // Get properties from first module
     const auto& holder = modules[0];
@@ -397,12 +390,12 @@ static int zxtune_metadata(const char* url, const RVService* service_api) {
 
     // Title
     if (auto title = props->FindString(Module::ATTR_TITLE)) {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_TITLE_TAG, title->c_str());
+        rv_metadata_set_tag(index, RV_METADATA_TITLE_TAG, title->c_str());
     }
 
     // Author
     if (auto author = props->FindString(Module::ATTR_AUTHOR)) {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_ARTIST_TAG, author->c_str());
+        rv_metadata_set_tag(index, RV_METADATA_ARTIST_TAG, author->c_str());
     }
 
     // Program/tracker that created the file
@@ -413,17 +406,17 @@ static int zxtune_metadata(const char* url, const RVService* service_api) {
         format_str = *type;
     }
     if (!format_str.empty()) {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_SONGTYPE_TAG, format_str.c_str());
+        rv_metadata_set_tag(index, RV_METADATA_SONGTYPE_TAG, format_str.c_str());
     }
 
     // Comment
     if (auto comment = props->FindString(Module::ATTR_COMMENT)) {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_MESSAGE_TAG, comment->c_str());
+        rv_metadata_set_tag(index, RV_METADATA_MESSAGE_TAG, comment->c_str());
     }
 
     // Date
     if (auto date = props->FindString(Module::ATTR_DATE)) {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_DATE_TAG, date->c_str());
+        rv_metadata_set_tag(index, RV_METADATA_DATE_TAG, date->c_str());
     }
 
     // Duration
@@ -431,7 +424,7 @@ static int zxtune_metadata(const char* url, const RVService* service_api) {
     if (info) {
         uint64_t duration_ms = info->Duration().Get();
         if (duration_ms > 0) {
-            RVMetadata_set_tag_f64(metadata_api, index, RV_METADATA_LENGTH_TAG, duration_ms / 1000.0);
+            rv_metadata_set_tag_f64(index, RV_METADATA_LENGTH_TAG, duration_ms / 1000.0);
         }
     }
 
@@ -452,7 +445,7 @@ static int zxtune_metadata(const char* url, const RVService* service_api) {
                 length = sub_info->Duration().Get() / 1000.0f;
             }
 
-            RVMetadata_add_subsong(metadata_api, index, static_cast<uint32_t>(i + 1), sub_title.c_str(), length);
+            rv_metadata_add_subsong(index, static_cast<uint32_t>(i + 1), sub_title.c_str(), length);
         }
     }
 
@@ -475,7 +468,9 @@ static void zxtune_event(void* user_data, uint8_t* event_data, uint64_t len) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void zxtune_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    rv_init_log_api(service_api);
+    rv_init_io_api(service_api);
+    rv_init_metadata_api(service_api);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

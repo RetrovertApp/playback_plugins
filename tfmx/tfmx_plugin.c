@@ -33,8 +33,9 @@
 #define CHANNELS 2
 #define BITS_PER_SAMPLE 16
 
-static const RVIo* g_io_api = nullptr;
-const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_IO_API();
+RV_PLUGIN_USE_LOG_API();
+RV_PLUGIN_USE_METADATA_API();
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -64,8 +65,6 @@ static void* tfmx_create(const RVService* service_api) {
         free(data);
         return nullptr;
     }
-
-    g_io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
 
     return data;
 }
@@ -113,7 +112,7 @@ static int tfmx_open(void* user_data, const char* url, uint32_t subsong, const R
     TfmxReplayerData* data = (TfmxReplayerData*)user_data;
     RVIoReadUrlResult read_res;
 
-    if ((read_res = RVIo_read_url_to_memory(g_io_api, url)).data == nullptr) {
+    if ((read_res = rv_io_read_url_to_memory(url)).data == nullptr) {
         rv_error("TFMX: Failed to load %s to memory", url);
         return -1;
     }
@@ -124,7 +123,7 @@ static int tfmx_open(void* user_data, const char* url, uint32_t subsong, const R
     // Initialize the decoder with the file data
     if (!tfmxdec_init(data->decoder, read_res.data, (uint32_t)read_res.data_size, (int)subsong)) {
         rv_error("TFMX: Failed to initialize decoder for %s", url);
-        RVIo_free_url_to_memory(g_io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
@@ -145,7 +144,7 @@ static int tfmx_open(void* user_data, const char* url, uint32_t subsong, const R
         rv_info("TFMX: Pattern display built - %d tracks, %u max rows", num_tracks, max_rows);
     }
 
-    RVIo_free_url_to_memory(g_io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
 
     const char* format_name = tfmxdec_format_name(data->decoder);
     rv_info("TFMX: Opened %s (format: %s)", url, format_name ? format_name : "unknown");
@@ -197,23 +196,17 @@ static int64_t tfmx_seek(void* user_data, int64_t ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int tfmx_metadata(const char* url, const RVService* service_api) {
+    (void)service_api;
     RVIoReadUrlResult read_res;
 
-    const RVIo* io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
-
-    if (io_api == nullptr || metadata_api == nullptr) {
-        return -1;
-    }
-
-    if ((read_res = RVIo_read_url_to_memory(io_api, url)).data == nullptr) {
+    if ((read_res = rv_io_read_url_to_memory(url)).data == nullptr) {
         rv_error("TFMX: Failed to load %s for metadata", url);
         return -1;
     }
 
     void* decoder = tfmxdec_new();
     if (decoder == nullptr) {
-        RVIo_free_url_to_memory(io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
@@ -221,11 +214,11 @@ static int tfmx_metadata(const char* url, const RVService* service_api) {
 
     if (!tfmxdec_init(decoder, read_res.data, (uint32_t)read_res.data_size, 0)) {
         tfmxdec_delete(decoder);
-        RVIo_free_url_to_memory(io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
-    RVMetadataId index = RVMetadata_create_url(metadata_api, url);
+    RVMetadataId index = rv_metadata_create_url(url);
 
     // Get metadata from decoder
     const char* title = tfmxdec_get_title(decoder);
@@ -235,22 +228,22 @@ static int tfmx_metadata(const char* url, const RVService* service_api) {
 
     // Use title if available, otherwise use name (constructed from filename)
     if (title != nullptr && title[0] != '\0') {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_TITLE_TAG, title);
+        rv_metadata_set_tag(index, RV_METADATA_TITLE_TAG, title);
     } else if (name != nullptr && name[0] != '\0') {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_TITLE_TAG, name);
+        rv_metadata_set_tag(index, RV_METADATA_TITLE_TAG, name);
     }
 
     if (artist != nullptr && artist[0] != '\0') {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_ARTIST_TAG, artist);
+        rv_metadata_set_tag(index, RV_METADATA_ARTIST_TAG, artist);
     }
 
     if (format_name != nullptr) {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_SONGTYPE_TAG, format_name);
+        rv_metadata_set_tag(index, RV_METADATA_SONGTYPE_TAG, format_name);
     }
 
     // Get duration in milliseconds and convert to seconds
     uint32_t duration_ms = tfmxdec_duration(decoder);
-    RVMetadata_set_tag_f64(metadata_api, index, RV_METADATA_LENGTH_TAG, (double)duration_ms / 1000.0);
+    rv_metadata_set_tag_f64(index, RV_METADATA_LENGTH_TAG, (double)duration_ms / 1000.0);
 
     // Handle subsongs
     int num_songs = tfmxdec_songs(decoder);
@@ -259,12 +252,12 @@ static int tfmx_metadata(const char* url, const RVService* service_api) {
             // Reinit for each subsong to get its duration
             tfmxdec_reinit(decoder, i);
             uint32_t subsong_duration_ms = tfmxdec_duration(decoder);
-            RVMetadata_add_subsong(metadata_api, index, i, "", (float)subsong_duration_ms / 1000.0f);
+            rv_metadata_add_subsong(index, i, "", (float)subsong_duration_ms / 1000.0f);
         }
     }
 
     tfmxdec_delete(decoder);
-    RVIo_free_url_to_memory(io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
 
     return 0;
 }
@@ -296,7 +289,9 @@ static void tfmx_event(void* user_data, uint8_t* event_data, uint64_t len) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void tfmx_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    rv_init_log_api(service_api);
+    rv_init_io_api(service_api);
+    rv_init_metadata_api(service_api);
 
     rv_info("TFMX plugin initialized (libtfmxaudiodecoder)");
 }

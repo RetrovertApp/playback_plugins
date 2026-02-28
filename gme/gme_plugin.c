@@ -32,8 +32,9 @@
 
 #define OUTPUT_SAMPLE_RATE 48000
 
-static const RVIo* g_io_api = nullptr;
-const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_IO_API();
+RV_PLUGIN_USE_METADATA_API();
+RV_PLUGIN_USE_LOG_API();
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -58,8 +59,6 @@ static void* gme_plugin_create(const RVService* service_api) {
     }
     memset(data, 0, sizeof(GmeReplayerData));
 
-    g_io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-
     return data;
 }
 
@@ -83,7 +82,7 @@ static int gme_plugin_open(void* user_data, const char* url, uint32_t subsong, c
 
     RVIoReadUrlResult read_res;
 
-    if ((read_res = RVIo_read_url_to_memory(g_io_api, url)).data == nullptr) {
+    if ((read_res = rv_io_read_url_to_memory(url)).data == nullptr) {
         rv_error("Failed to load %s to memory", url);
         return -1;
     }
@@ -100,7 +99,7 @@ static int gme_plugin_open(void* user_data, const char* url, uint32_t subsong, c
     gme_err_t err = gme_open_data(read_res.data, (long)read_res.data_size, &data->emu, OUTPUT_SAMPLE_RATE);
     if (err != nullptr) {
         rv_error("GME failed to open %s: %s", url, err);
-        RVIo_free_url_to_memory(g_io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
@@ -118,7 +117,7 @@ static int gme_plugin_open(void* user_data, const char* url, uint32_t subsong, c
         rv_error("GME failed to start track %d of %s: %s", data->current_track, url, err);
         gme_delete(data->emu);
         data->emu = nullptr;
-        RVIo_free_url_to_memory(g_io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
@@ -134,7 +133,7 @@ static int gme_plugin_open(void* user_data, const char* url, uint32_t subsong, c
         gme_free_info(track_info);
     }
 
-    RVIo_free_url_to_memory(g_io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
     return 0;
 }
 
@@ -314,19 +313,10 @@ static int64_t gme_plugin_seek(void* user_data, int64_t ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int gme_plugin_metadata(const char* url, const RVService* service_api) {
+    (void)service_api;
     RVIoReadUrlResult read_res;
 
-    // Get IO API from service_api parameter (not the cached g_io_api)
-    // This ensures metadata() works even if static_init wasn't called
-    const RVIo* io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
-
-    if (io_api == nullptr) {
-        rv_error("Failed to get IO API for %s", url);
-        return -1;
-    }
-
-    if ((read_res = RVIo_read_url_to_memory(io_api, url)).data == nullptr) {
+    if ((read_res = rv_io_read_url_to_memory(url)).data == nullptr) {
         rv_error("Failed to load %s to memory", url);
         return -1;
     }
@@ -334,11 +324,11 @@ static int gme_plugin_metadata(const char* url, const RVService* service_api) {
     Music_Emu* emu = nullptr;
     gme_err_t err = gme_open_data(read_res.data, (long)read_res.data_size, &emu, gme_info_only);
     if (err != nullptr) {
-        RVIo_free_url_to_memory(io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
-    RVMetadataId index = RVMetadata_create_url(metadata_api, url);
+    RVMetadataId index = rv_metadata_create_url(url);
 
     // Get track info for the first track
     gme_info_t* track_info = nullptr;
@@ -346,26 +336,26 @@ static int gme_plugin_metadata(const char* url, const RVService* service_api) {
     if (err == nullptr && track_info != nullptr) {
         // Set title
         if (track_info->song != nullptr && track_info->song[0] != '\0') {
-            RVMetadata_set_tag(metadata_api, index, RV_METADATA_TITLE_TAG, track_info->song);
+            rv_metadata_set_tag(index, RV_METADATA_TITLE_TAG, track_info->song);
         } else if (track_info->game != nullptr && track_info->game[0] != '\0') {
-            RVMetadata_set_tag(metadata_api, index, RV_METADATA_TITLE_TAG, track_info->game);
+            rv_metadata_set_tag(index, RV_METADATA_TITLE_TAG, track_info->game);
         }
 
         // Set artist/author
         if (track_info->author != nullptr && track_info->author[0] != '\0') {
-            RVMetadata_set_tag(metadata_api, index, RV_METADATA_ARTIST_TAG, track_info->author);
+            rv_metadata_set_tag(index, RV_METADATA_ARTIST_TAG, track_info->author);
         }
 
         // Set system as song type
         if (track_info->system != nullptr && track_info->system[0] != '\0') {
-            RVMetadata_set_tag(metadata_api, index, RV_METADATA_SONGTYPE_TAG, track_info->system);
+            rv_metadata_set_tag(index, RV_METADATA_SONGTYPE_TAG, track_info->system);
         }
 
         // Set duration
         if (track_info->play_length > 0) {
-            RVMetadata_set_tag_f64(metadata_api, index, RV_METADATA_LENGTH_TAG, track_info->play_length / 1000.0);
+            rv_metadata_set_tag_f64(index, RV_METADATA_LENGTH_TAG, track_info->play_length / 1000.0);
         } else if (track_info->length > 0) {
-            RVMetadata_set_tag_f64(metadata_api, index, RV_METADATA_LENGTH_TAG, track_info->length / 1000.0);
+            rv_metadata_set_tag_f64(index, RV_METADATA_LENGTH_TAG, track_info->length / 1000.0);
         }
 
         gme_free_info(track_info);
@@ -388,16 +378,16 @@ static int gme_plugin_metadata(const char* url, const RVService* service_api) {
                 } else if (subsong_info->length > 0) {
                     length = subsong_info->length / 1000.0f;
                 }
-                RVMetadata_add_subsong(metadata_api, index, i, subsong_name, length);
+                rv_metadata_add_subsong(index, i, subsong_name, length);
                 gme_free_info(subsong_info);
             } else {
-                RVMetadata_add_subsong(metadata_api, index, i, "", 0.0f);
+                rv_metadata_add_subsong(index, i, "", 0.0f);
             }
         }
     }
 
     gme_delete(emu);
-    RVIo_free_url_to_memory(io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
 
     return 0;
 }
@@ -428,7 +418,9 @@ static void gme_plugin_event(void* user_data, uint8_t* event_data, uint64_t len)
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void gme_plugin_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    rv_init_log_api(service_api);
+    rv_init_io_api(service_api);
+    rv_init_metadata_api(service_api);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -38,8 +38,9 @@
 // Fade out duration in ms
 #define FADE_OUT_MS 3000
 
-static const RVIo* g_io_api = nullptr;
-const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_IO_API();
+RV_PLUGIN_USE_LOG_API();
+RV_PLUGIN_USE_METADATA_API();
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -65,8 +66,6 @@ static void* libkss_plugin_create(const RVService* service_api) {
         return nullptr;
     }
     memset(data, 0, sizeof(LibkssReplayerData));
-
-    g_io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
 
     return data;
 }
@@ -104,7 +103,7 @@ static int libkss_plugin_open(void* user_data, const char* url, uint32_t subsong
         data->kss = nullptr;
     }
 
-    RVIoReadUrlResult read_res = RVIo_read_url_to_memory(g_io_api, url);
+    RVIoReadUrlResult read_res = rv_io_read_url_to_memory(url);
     if (read_res.data == nullptr) {
         rv_error("libkss: Failed to load %s to memory", url);
         return -1;
@@ -120,7 +119,7 @@ static int libkss_plugin_open(void* user_data, const char* url, uint32_t subsong
 
     // KSS_bin2kss auto-detects format and converts to KSS container
     data->kss = KSS_bin2kss(read_res.data, (uint32_t)read_res.data_size, filename);
-    RVIo_free_url_to_memory(g_io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
 
     if (data->kss == nullptr) {
         rv_error("libkss: Failed to parse %s", url);
@@ -278,14 +277,9 @@ static int64_t libkss_plugin_seek(void* user_data, int64_t ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int libkss_plugin_metadata(const char* url, const RVService* service_api) {
-    const RVIo* io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
+    (void)service_api;
 
-    if (io_api == nullptr || metadata_api == nullptr) {
-        return -1;
-    }
-
-    RVIoReadUrlResult read_res = RVIo_read_url_to_memory(io_api, url);
+    RVIoReadUrlResult read_res = rv_io_read_url_to_memory(url);
     if (read_res.data == nullptr) {
         return -1;
     }
@@ -298,18 +292,18 @@ static int libkss_plugin_metadata(const char* url, const RVService* service_api)
     }
 
     KSS* kss = KSS_bin2kss(read_res.data, (uint32_t)read_res.data_size, filename);
-    RVIo_free_url_to_memory(io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
 
     if (kss == nullptr) {
         return -1;
     }
 
-    RVMetadataId index = RVMetadata_create_url(metadata_api, url);
+    RVMetadataId index = rv_metadata_create_url(url);
 
     // Extract title if available
     const char* title = KSS_get_title(kss);
     if (title != nullptr && title[0] != '\0') {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_TITLE_TAG, title);
+        rv_metadata_set_tag(index, RV_METADATA_TITLE_TAG, title);
     }
 
     // Set song type based on KSS type field
@@ -336,17 +330,17 @@ static int libkss_plugin_metadata(const char* url, const RVService* service_api)
         default:
             break;
     }
-    RVMetadata_set_tag(metadata_api, index, RV_METADATA_SONGTYPE_TAG, song_type);
-    RVMetadata_set_tag(metadata_api, index, RV_METADATA_AUTHORINGTOOL_TAG, "MSX");
+    rv_metadata_set_tag(index, RV_METADATA_SONGTYPE_TAG, song_type);
+    rv_metadata_set_tag(index, RV_METADATA_AUTHORINGTOOL_TAG, "MSX");
 
     // Set default duration
-    RVMetadata_set_tag_f64(metadata_api, index, RV_METADATA_LENGTH_TAG, DEFAULT_LENGTH_MS / 1000.0);
+    rv_metadata_set_tag_f64(index, RV_METADATA_LENGTH_TAG, DEFAULT_LENGTH_MS / 1000.0);
 
     // Add subsongs if the track range spans more than one
     int track_count = kss->trk_max - kss->trk_min + 1;
     if (track_count > 1) {
         for (int i = 0; i < track_count; i++) {
-            RVMetadata_add_subsong(metadata_api, index, (uint32_t)i, "", (float)(DEFAULT_LENGTH_MS / 1000.0));
+            rv_metadata_add_subsong(index, (uint32_t)i, "", (float)(DEFAULT_LENGTH_MS / 1000.0));
         }
     }
 
@@ -365,7 +359,9 @@ static void libkss_plugin_event(void* user_data, uint8_t* event_data, uint64_t l
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void libkss_plugin_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    rv_init_log_api(service_api);
+    rv_init_io_api(service_api);
+    rv_init_metadata_api(service_api);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

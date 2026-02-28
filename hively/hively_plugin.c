@@ -28,8 +28,9 @@
 #define FREQ 48000
 #define FRAME_SIZE ((FREQ * 2) / 50)
 
-static const RVIo* g_io_api = nullptr;
-const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_IO_API();
+RV_PLUGIN_USE_METADATA_API();
+RV_PLUGIN_USE_LOG_API();
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -53,8 +54,6 @@ static void* hively_create(const RVService* service_api) {
     void* data = malloc(sizeof(struct HivelyReplayerData));
     memset(data, 0, sizeof(struct HivelyReplayerData));
 
-    g_io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-
     return data;
 }
 
@@ -76,7 +75,7 @@ static int hively_destroy(void* user_data) {
 static int hively_open(void* user_data, const char* url, uint32_t subsong, const RVService* service_api) {
     RVIoReadUrlResult read_res;
 
-    if ((read_res = RVIo_read_url_to_memory(g_io_api, url)).data == nullptr) {
+    if ((read_res = rv_io_read_url_to_memory(url)).data == nullptr) {
         rv_error("Failed to load %s to memory", url);
         return -1;
     }
@@ -92,7 +91,7 @@ static int hively_open(void* user_data, const char* url, uint32_t subsong, const
     data->tune = hvl_LoadTuneMemory(read_res.data, (int)read_res.data_size, FREQ, 0);
     if (data->tune == nullptr) {
         rv_error("Failed to parse %s", url);
-        RVIo_free_url_to_memory(g_io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
@@ -102,7 +101,7 @@ static int hively_open(void* user_data, const char* url, uint32_t subsong, const
     data->read_index = 0;
     data->frames_decoded = 0;
 
-    RVIo_free_url_to_memory(g_io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
     return 0;
 }
 
@@ -191,16 +190,10 @@ static int64_t hively_seek(void* user_data, int64_t ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int hively_metadata(const char* url, const RVService* service_api) {
+    (void)service_api;
     RVIoReadUrlResult read_res;
 
-    const RVIo* io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
-
-    if (io_api == nullptr || metadata_api == nullptr) {
-        return -1;
-    }
-
-    if ((read_res = RVIo_read_url_to_memory(io_api, url)).data == nullptr) {
+    if ((read_res = rv_io_read_url_to_memory(url)).data == nullptr) {
         rv_error("Failed to load %s to memory", url);
         return -1;
     }
@@ -214,7 +207,7 @@ static int hively_metadata(const char* url, const RVService* service_api) {
 
     struct hvl_tune* tune = hvl_LoadTuneMemory((uint8_t*)read_res.data, (int)read_res.data_size, FREQ, 0);
     if (tune == nullptr) {
-        RVIo_free_url_to_memory(io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
@@ -223,26 +216,26 @@ static int hively_metadata(const char* url, const RVService* service_api) {
 
     const char* tool = is_ahx ? "AHX Tracker" : "Hively Tracker";
 
-    RVMetadataId index = RVMetadata_create_url(metadata_api, url);
+    RVMetadataId index = rv_metadata_create_url(url);
 
-    RVMetadata_set_tag(metadata_api, index, RV_METADATA_TITLE_TAG, tune->ht_Name);
-    RVMetadata_set_tag(metadata_api, index, RV_METADATA_SONGTYPE_TAG, tool);
-    RVMetadata_set_tag(metadata_api, index, RV_METADATA_ARTIST_TAG, tool);
-    RVMetadata_set_tag_f64(metadata_api, index, RV_METADATA_LENGTH_TAG, length);
+    rv_metadata_set_tag(index, RV_METADATA_TITLE_TAG, tune->ht_Name);
+    rv_metadata_set_tag(index, RV_METADATA_SONGTYPE_TAG, tool);
+    rv_metadata_set_tag(index, RV_METADATA_ARTIST_TAG, tool);
+    rv_metadata_set_tag_f64(index, RV_METADATA_LENGTH_TAG, length);
 
     // Instruments start from 1 in hively so skip 0
     for (int i = 1; i < tune->ht_InstrumentNr; ++i) {
-        RVMetadata_add_instrument(metadata_api, index, tune->ht_Instruments[i].ins_Name);
+        rv_metadata_add_instrument(index, tune->ht_Instruments[i].ins_Name);
     }
 
     if (tune->ht_SubsongNr > 1) {
         for (int i = 0, c = tune->ht_SubsongNr; i < c; ++i) {
-            RVMetadata_add_subsong(metadata_api, index, i, "", 0.0f);
+            rv_metadata_add_subsong(index, i, "", 0.0f);
         }
     }
 
     hvl_FreeTune(tune);
-    RVIo_free_url_to_memory(io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
 
     return 0;
 }
@@ -278,7 +271,9 @@ static void hively_event(void* user_data, uint8_t* data, uint64_t len) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void hively_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    rv_init_log_api(service_api);
+    rv_init_io_api(service_api);
+    rv_init_metadata_api(service_api);
 
     hvl_InitReplayer();
 }

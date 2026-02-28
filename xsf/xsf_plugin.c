@@ -52,8 +52,9 @@
 
 #define XSF_DEFAULT_LENGTH_MS (180 * 1000) // 3 minutes default if no length tag
 
-static const RVIo* g_io_api = nullptr;
-const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_IO_API();
+RV_PLUGIN_USE_LOG_API();
+RV_PLUGIN_USE_METADATA_API();
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Emulator wrapper vtable - uniform interface for all xSF emulator backends
@@ -374,7 +375,6 @@ static void* xsf_plugin_create(const RVService* service_api) {
         return nullptr;
     }
 
-    g_io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
     data->length_ms = -1;
     data->fade_ms = 0;
 
@@ -422,7 +422,7 @@ static int xsf_plugin_open(void* user_data, const char* url, uint32_t subsong, c
     data->url[sizeof(data->url) - 1] = '\0';
 
     // Set up psflib file callbacks using our IO bridge
-    xsf_file_context_init(&data->file_ctx, g_io_api, url);
+    xsf_file_context_init(&data->file_ctx, g_rv_io, url);
     data->psf_callbacks.path_separators = "\\/|:";
     data->psf_callbacks.context = &data->file_ctx;
     data->psf_callbacks.fopen = xsf_fopen;
@@ -637,12 +637,7 @@ static int64_t xsf_plugin_seek(void* user_data, int64_t ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int xsf_plugin_metadata(const char* url, const RVService* service_api) {
-    const RVIo* io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
-
-    if (io_api == nullptr || metadata_api == nullptr) {
-        return -1;
-    }
+    (void)service_api;
 
     // Set up temp data for metadata parsing
     XsfReplayerData temp_data;
@@ -651,7 +646,7 @@ static int xsf_plugin_metadata(const char* url, const RVService* service_api) {
 
     // Set up psflib file callbacks
     XsfFileContext file_ctx;
-    xsf_file_context_init(&file_ctx, io_api, url);
+    xsf_file_context_init(&file_ctx, g_rv_io, url);
 
     psf_file_callbacks callbacks;
     callbacks.path_separators = "\\/|:";
@@ -668,16 +663,16 @@ static int xsf_plugin_metadata(const char* url, const RVService* service_api) {
         return -1;
     }
 
-    RVMetadataId index = RVMetadata_create_url(metadata_api, url);
+    RVMetadataId index = rv_metadata_create_url(url);
 
     if (temp_data.title[0] != '\0') {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_TITLE_TAG, temp_data.title);
+        rv_metadata_set_tag(index, RV_METADATA_TITLE_TAG, temp_data.title);
     }
     if (temp_data.artist[0] != '\0') {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_ARTIST_TAG, temp_data.artist);
+        rv_metadata_set_tag(index, RV_METADATA_ARTIST_TAG, temp_data.artist);
     }
     if (temp_data.game[0] != '\0') {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_SONGTYPE_TAG, temp_data.game);
+        rv_metadata_set_tag(index, RV_METADATA_SONGTYPE_TAG, temp_data.game);
     }
 
     // Set platform name
@@ -711,11 +706,11 @@ static int xsf_plugin_metadata(const char* url, const RVService* service_api) {
             platform = "Capcom QSound";
             break;
     }
-    RVMetadata_set_tag(metadata_api, index, RV_METADATA_AUTHORINGTOOL_TAG, platform);
+    rv_metadata_set_tag(index, RV_METADATA_AUTHORINGTOOL_TAG, platform);
 
     if (temp_data.length_ms > 0) {
         double length_sec = (double)temp_data.length_ms / 1000.0;
-        RVMetadata_set_tag_f64(metadata_api, index, RV_METADATA_LENGTH_TAG, length_sec);
+        rv_metadata_set_tag_f64(index, RV_METADATA_LENGTH_TAG, length_sec);
     }
 
     return 0;
@@ -745,21 +740,17 @@ static const char* s_bios_search_paths[] = {
 };
 
 static void xsf_plugin_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
-    const RVIo* io = RVService_get_io(service_api, RV_IO_API_VERSION);
-
-    if (io == nullptr) {
-        rv_error("PSF: IO API not available, PSF/PSF2 playback will be disabled");
-        return;
-    }
+    rv_init_log_api(service_api);
+    rv_init_io_api(service_api);
+    rv_init_metadata_api(service_api);
 
     // Search for external BIOS file in well-known locations
     RVIoReadUrlResult bios_result = {0};
     const char* found_path = nullptr;
 
     for (int i = 0; i < (int)(sizeof(s_bios_search_paths) / sizeof(s_bios_search_paths[0])); i++) {
-        if (RVIo_exists(io, s_bios_search_paths[i])) {
-            bios_result = RVIo_read_url_to_memory(io, s_bios_search_paths[i]);
+        if (rv_io_exists(s_bios_search_paths[i])) {
+            bios_result = rv_io_read_url_to_memory(s_bios_search_paths[i]);
             if (bios_result.data != nullptr && bios_result.data_size > 0) {
                 found_path = s_bios_search_paths[i];
                 break;
@@ -786,7 +777,7 @@ static void xsf_plugin_static_init(const RVService* service_api) {
         }
     }
 
-    RVIo_free_url_to_memory(io, bios_result.data);
+    rv_io_free_url_to_memory(bios_result.data);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -25,8 +25,9 @@
 
 #define OUTPUT_SAMPLE_RATE 48000 // Match system audio rate
 
-static const RVIo* g_io_api = nullptr;
-const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_IO_API();
+RV_PLUGIN_USE_METADATA_API();
+RV_PLUGIN_USE_LOG_API();
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -58,7 +59,6 @@ static void* asap_create(const RVService* service_api) {
     }
 
     // Note: Sample rate is set in asap_open() after loading the file
-    g_io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
 
     return data;
 }
@@ -83,7 +83,7 @@ static int asap_open(void* user_data, const char* url, uint32_t subsong, const R
 
     RVIoReadUrlResult read_res;
 
-    if ((read_res = RVIo_read_url_to_memory(g_io_api, url)).data == nullptr) {
+    if ((read_res = rv_io_read_url_to_memory(url)).data == nullptr) {
         rv_error("Failed to load %s to memory", url);
         return -1;
     }
@@ -92,7 +92,7 @@ static int asap_open(void* user_data, const char* url, uint32_t subsong, const R
 
     if (!ASAP_Load(data->asap, url, read_res.data, (int)read_res.data_size)) {
         rv_error("ASAP failed to parse %s", url);
-        RVIo_free_url_to_memory(g_io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
@@ -116,11 +116,11 @@ static int asap_open(void* user_data, const char* url, uint32_t subsong, const R
 
     if (!ASAP_PlaySong(data->asap, data->current_subsong, duration)) {
         rv_error("ASAP failed to play subsong %d of %s", data->current_subsong, url);
-        RVIo_free_url_to_memory(g_io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
-    RVIo_free_url_to_memory(g_io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
     return 0;
 }
 
@@ -187,55 +187,49 @@ static int64_t asap_seek(void* user_data, int64_t ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int asap_metadata(const char* url, const RVService* service_api) {
+    (void)service_api;
     RVIoReadUrlResult read_res;
 
-    const RVIo* io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
-
-    if (io_api == nullptr || metadata_api == nullptr) {
-        return -1;
-    }
-
-    if ((read_res = RVIo_read_url_to_memory(io_api, url)).data == nullptr) {
+    if ((read_res = rv_io_read_url_to_memory(url)).data == nullptr) {
         rv_error("Failed to load %s to memory", url);
         return -1;
     }
 
     ASAPInfo* info = ASAPInfo_New();
     if (info == nullptr) {
-        RVIo_free_url_to_memory(io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
     if (!ASAPInfo_Load(info, url, read_res.data, (int)read_res.data_size)) {
         ASAPInfo_Delete(info);
-        RVIo_free_url_to_memory(io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
-    RVMetadataId index = RVMetadata_create_url(metadata_api, url);
+    RVMetadataId index = rv_metadata_create_url(url);
 
     const char* title = ASAPInfo_GetTitle(info);
     const char* author = ASAPInfo_GetAuthor(info);
 
     if (title && title[0] != '\0') {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_TITLE_TAG, title);
+        rv_metadata_set_tag(index, RV_METADATA_TITLE_TAG, title);
     } else {
         // Use filename as title if no title in file
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_TITLE_TAG, ASAPInfo_GetTitleOrFilename(info));
+        rv_metadata_set_tag(index, RV_METADATA_TITLE_TAG, ASAPInfo_GetTitleOrFilename(info));
     }
 
     if (author && author[0] != '\0') {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_ARTIST_TAG, author);
+        rv_metadata_set_tag(index, RV_METADATA_ARTIST_TAG, author);
     }
 
-    RVMetadata_set_tag(metadata_api, index, RV_METADATA_SONGTYPE_TAG, "ASAP (Atari 8-bit)");
+    rv_metadata_set_tag(index, RV_METADATA_SONGTYPE_TAG, "ASAP (Atari 8-bit)");
 
     // Get duration of default song
     int default_song = ASAPInfo_GetDefaultSong(info);
     int duration_ms = ASAPInfo_GetDuration(info, default_song);
     if (duration_ms > 0) {
-        RVMetadata_set_tag_f64(metadata_api, index, RV_METADATA_LENGTH_TAG, duration_ms / 1000.0);
+        rv_metadata_set_tag_f64(index, RV_METADATA_LENGTH_TAG, duration_ms / 1000.0);
     }
 
     // Add subsongs if more than one
@@ -244,12 +238,12 @@ static int asap_metadata(const char* url, const RVService* service_api) {
         for (int i = 0; i < num_songs; i++) {
             int subsong_duration = ASAPInfo_GetDuration(info, i);
             float length = subsong_duration > 0 ? subsong_duration / 1000.0f : 0.0f;
-            RVMetadata_add_subsong(metadata_api, index, i, "", length);
+            rv_metadata_add_subsong(index, i, "", length);
         }
     }
 
     ASAPInfo_Delete(info);
-    RVIo_free_url_to_memory(io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
 
     return 0;
 }
@@ -279,7 +273,9 @@ static void asap_event(void* user_data, uint8_t* event_data, uint64_t len) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void asap_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    rv_init_log_api(service_api);
+    rv_init_io_api(service_api);
+    rv_init_metadata_api(service_api);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -31,7 +31,8 @@
 
 #define MDX_SAMPLE_RATE 44100
 
-const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_LOG_API();
+RV_PLUGIN_USE_METADATA_API();
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -211,11 +212,7 @@ static int64_t mdxmini_plugin_seek(void* user_data, int64_t ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int mdxmini_plugin_metadata(const char* url, const RVService* service_api) {
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
-
-    if (metadata_api == nullptr) {
-        return -1;
-    }
+    (void)service_api;
 
     // Open the MDX file to extract metadata
     t_mdxmini mdx;
@@ -230,24 +227,24 @@ static int mdxmini_plugin_metadata(const char* url, const RVService* service_api
 
     mdx_set_max_loop(&mdx, 2);
 
-    RVMetadataId index = RVMetadata_create_url(metadata_api, url);
+    RVMetadataId index = rv_metadata_create_url(url);
 
     // Get title (may be Shift-JIS encoded)
     char title[256];
     memset(title, 0, sizeof(title));
     mdx_get_title(&mdx, title);
     if (title[0] != '\0') {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_TITLE_TAG, title);
+        rv_metadata_set_tag(index, RV_METADATA_TITLE_TAG, title);
     }
 
     // Set song type
-    RVMetadata_set_tag(metadata_api, index, RV_METADATA_SONGTYPE_TAG, "MDX");
-    RVMetadata_set_tag(metadata_api, index, RV_METADATA_AUTHORINGTOOL_TAG, "Sharp X68000");
+    rv_metadata_set_tag(index, RV_METADATA_SONGTYPE_TAG, "MDX");
+    rv_metadata_set_tag(index, RV_METADATA_AUTHORINGTOOL_TAG, "Sharp X68000");
 
     // Get duration
     int length = mdx_get_length(&mdx);
     if (length > 0) {
-        RVMetadata_set_tag_f64(metadata_api, index, RV_METADATA_LENGTH_TAG, (double)length);
+        rv_metadata_set_tag_f64(index, RV_METADATA_LENGTH_TAG, (double)length);
     }
 
     mdx_close(&mdx);
@@ -265,7 +262,8 @@ static void mdxmini_plugin_event(void* user_data, uint8_t* event_data, uint64_t 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void mdxmini_plugin_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    rv_init_log_api(service_api);
+    rv_init_metadata_api(service_api);
     mdx_set_rate(MDX_SAMPLE_RATE);
 }
 

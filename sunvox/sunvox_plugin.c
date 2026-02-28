@@ -53,8 +53,9 @@
 // Use slot 0 for playback (SunVox supports multiple slots but we use one)
 #define SUNVOX_SLOT 0
 
-static const RVIo* g_io_api = nullptr;
-const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_IO_API();
+RV_PLUGIN_USE_LOG_API();
+RV_PLUGIN_USE_METADATA_API();
 static int g_sunvox_initialized = 0;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -80,7 +81,6 @@ static void* sunvox_plugin_create(const RVService* service_api) {
         return nullptr;
     }
 
-    g_io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
     return data;
 }
 
@@ -123,7 +123,7 @@ static int sunvox_plugin_open(void* user_data, const char* url, uint32_t subsong
         return -1;
     }
 
-    RVIoReadUrlResult read_res = RVIo_read_url_to_memory(g_io_api, url);
+    RVIoReadUrlResult read_res = rv_io_read_url_to_memory(url);
     if (read_res.data == nullptr) {
         rv_error("sunvox: Failed to load %s to memory", url);
         return -1;
@@ -132,7 +132,7 @@ static int sunvox_plugin_open(void* user_data, const char* url, uint32_t subsong
     // Open a slot
     if (sv_open_slot(SUNVOX_SLOT) != 0) {
         rv_error("sunvox: Failed to open slot");
-        RVIo_free_url_to_memory(g_io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
     data->slot_open = 1;
@@ -140,13 +140,13 @@ static int sunvox_plugin_open(void* user_data, const char* url, uint32_t subsong
     // Load project from memory
     if (sv_load_from_memory(SUNVOX_SLOT, read_res.data, (uint32_t)read_res.data_size) != 0) {
         rv_error("sunvox: Failed to load project: %s", url);
-        RVIo_free_url_to_memory(g_io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         sv_close_slot(SUNVOX_SLOT);
         data->slot_open = 0;
         return -1;
     }
 
-    RVIo_free_url_to_memory(g_io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
 
     // Set volume and enable auto-stop
     sv_volume(SUNVOX_SLOT, 256);
@@ -282,46 +282,45 @@ static int64_t sunvox_plugin_seek(void* user_data, int64_t ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int sunvox_plugin_metadata(const char* url, const RVService* service_api) {
-    const RVIo* io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
+    (void)service_api;
 
-    if (io_api == nullptr || metadata_api == nullptr || !g_sunvox_initialized) {
+    if (!g_sunvox_initialized) {
         return -1;
     }
 
-    RVIoReadUrlResult read_res = RVIo_read_url_to_memory(io_api, url);
+    RVIoReadUrlResult read_res = rv_io_read_url_to_memory(url);
     if (read_res.data == nullptr) {
         return -1;
     }
 
     // Open a temporary slot for metadata extraction
     if (sv_open_slot(SUNVOX_SLOT) != 0) {
-        RVIo_free_url_to_memory(io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         return -1;
     }
 
     if (sv_load_from_memory(SUNVOX_SLOT, read_res.data, (uint32_t)read_res.data_size) != 0) {
-        RVIo_free_url_to_memory(io_api, read_res.data);
+        rv_io_free_url_to_memory(read_res.data);
         sv_close_slot(SUNVOX_SLOT);
         return -1;
     }
 
-    RVIo_free_url_to_memory(io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
 
-    RVMetadataId index = RVMetadata_create_url(metadata_api, url);
+    RVMetadataId index = rv_metadata_create_url(url);
 
     const char* name = sv_get_song_name(SUNVOX_SLOT);
     if (name != nullptr && name[0] != '\0') {
-        RVMetadata_set_tag(metadata_api, index, RV_METADATA_TITLE_TAG, name);
+        rv_metadata_set_tag(index, RV_METADATA_TITLE_TAG, name);
     }
 
-    RVMetadata_set_tag(metadata_api, index, RV_METADATA_SONGTYPE_TAG, "SunVox");
+    rv_metadata_set_tag(index, RV_METADATA_SONGTYPE_TAG, "SunVox");
 
     // Calculate duration from frame count
     uint32_t total_frames = sv_get_song_length_frames(SUNVOX_SLOT);
     if (total_frames > 0) {
         double duration = (double)total_frames / (double)OUTPUT_SAMPLE_RATE;
-        RVMetadata_set_tag_f64(metadata_api, index, RV_METADATA_LENGTH_TAG, duration);
+        rv_metadata_set_tag_f64(index, RV_METADATA_LENGTH_TAG, duration);
     }
 
     sv_close_slot(SUNVOX_SLOT);
@@ -339,7 +338,9 @@ static void sunvox_plugin_event(void* user_data, uint8_t* event_data, uint64_t l
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void sunvox_plugin_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    rv_init_log_api(service_api);
+    rv_init_io_api(service_api);
+    rv_init_metadata_api(service_api);
 
     if (!g_sunvox_initialized) {
         // Find our own directory, then load sunvox library from there

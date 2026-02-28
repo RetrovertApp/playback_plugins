@@ -30,7 +30,8 @@ unsigned int audio_scope_get_data(int channel, float* buffer, unsigned int num_s
 
 #define OUTPUT_SAMPLE_RATE 48000
 
-const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_LOG_API();
+RV_PLUGIN_USE_METADATA_API();
 
 // Base directory for UADE data files (players, eagleplayer.conf)
 static char g_uade_base_dir[4096] = { 0 };
@@ -341,7 +342,7 @@ static int64_t uade_plugin_seek(void* user_data, int64_t ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int uade_plugin_metadata(const char* url, const RVService* service_api) {
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
+    (void)service_api;
 
     // Create state with spawn=1 for full playback capability (needed to get all metadata)
     ThreadWrapper thread_wrapper;
@@ -358,27 +359,27 @@ static int uade_plugin_metadata(const char* url, const RVService* service_api) {
         return -1;
     }
 
-    RVMetadataId index = RVMetadata_create_url(metadata_api, url);
+    RVMetadataId index = rv_metadata_create_url(url);
 
     const struct uade_song_info* song_info = uade_get_song_info(state);
     if (song_info) {
         // Set title from module name or filename
         if (song_info->modulename[0] != '\0') {
-            RVMetadata_set_tag(metadata_api, index, RV_METADATA_TITLE_TAG, song_info->modulename);
+            rv_metadata_set_tag(index, RV_METADATA_TITLE_TAG, song_info->modulename);
         }
 
         // Set song type from player name
         if (song_info->playername[0] != '\0') {
             char songtype[128];
             snprintf(songtype, sizeof(songtype), "UADE (%s)", song_info->playername);
-            RVMetadata_set_tag(metadata_api, index, RV_METADATA_SONGTYPE_TAG, songtype);
+            rv_metadata_set_tag(index, RV_METADATA_SONGTYPE_TAG, songtype);
         } else {
-            RVMetadata_set_tag(metadata_api, index, RV_METADATA_SONGTYPE_TAG, "UADE (Amiga)");
+            rv_metadata_set_tag(index, RV_METADATA_SONGTYPE_TAG, "UADE (Amiga)");
         }
 
         // Set duration if available
         if (song_info->duration > 0) {
-            RVMetadata_set_tag_f64(metadata_api, index, RV_METADATA_LENGTH_TAG, song_info->duration);
+            rv_metadata_set_tag_f64(index, RV_METADATA_LENGTH_TAG, song_info->duration);
         }
 
         // Add subsongs if more than one
@@ -406,7 +407,7 @@ static int uade_plugin_metadata(const char* url, const RVService* service_api) {
             for (int i = sub_min; i <= sub_max; i++) {
                 char subsong_name[512];
                 snprintf(subsong_name, sizeof(subsong_name), "%s (%d/%d)", title, i, sub_max);
-                RVMetadata_add_subsong(metadata_api, index, (uint32_t)i, subsong_name, 0.0f);
+                rv_metadata_add_subsong(index, (uint32_t)i, subsong_name, 0.0f);
             }
         }
     }
@@ -428,7 +429,8 @@ static void uade_plugin_event(void* user_data, uint8_t* event_data, uint64_t len
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void uade_plugin_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    rv_init_log_api(service_api);
+    rv_init_metadata_api(service_api);
 
     // Set base directory for UADE data files
     // The plugin expects the uade data directory to be alongside the plugin

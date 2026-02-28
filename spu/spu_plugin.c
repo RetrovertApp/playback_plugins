@@ -41,8 +41,9 @@
 #define SPU_SCOPE_BUFFER_SIZE 1024
 #define SPU_SCOPE_BUFFER_MASK (SPU_SCOPE_BUFFER_SIZE - 1)
 
-static const RVIo* g_io_api = nullptr;
-const RVLog* g_rv_log = nullptr;
+RV_PLUGIN_USE_IO_API();
+RV_PLUGIN_USE_LOG_API();
+RV_PLUGIN_USE_METADATA_API();
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // PS-ADPCM filter coefficients (fixed-point, 5 filters)
@@ -78,7 +79,9 @@ static const char* spu_plugin_supported_extensions(void) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void spu_plugin_static_init(const RVService* service_api) {
-    g_rv_log = RVService_get_log(service_api, RV_LOG_API_VERSION);
+    rv_init_log_api(service_api);
+    rv_init_io_api(service_api);
+    rv_init_metadata_api(service_api);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -90,8 +93,6 @@ static void* spu_plugin_create(const RVService* service_api) {
     }
     memset(data, 0, sizeof(SpuReplayerData));
 
-    g_io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-
     return data;
 }
 
@@ -100,7 +101,7 @@ static void* spu_plugin_create(const RVService* service_api) {
 static int spu_plugin_destroy(void* user_data) {
     SpuReplayerData* data = (SpuReplayerData*)user_data;
     if (data->file_data != nullptr) {
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
     }
     free(data);
     return 0;
@@ -148,14 +149,14 @@ static int spu_plugin_open(void* user_data, const char* url, uint32_t subsong, c
     SpuReplayerData* data = (SpuReplayerData*)user_data;
 
     RVIoReadUrlResult read_res;
-    if ((read_res = RVIo_read_url_to_memory(g_io_api, url)).data == nullptr) {
+    if ((read_res = rv_io_read_url_to_memory(url)).data == nullptr) {
         rv_error("SPU: Failed to load %s to memory", url);
         return -1;
     }
 
     // Free previous data
     if (data->file_data != nullptr) {
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
         data->file_data = nullptr;
     }
 
@@ -199,7 +200,7 @@ static void spu_plugin_close(void* user_data) {
     SpuReplayerData* data = (SpuReplayerData*)user_data;
 
     if (data->file_data != nullptr) {
-        RVIo_free_url_to_memory(g_io_api, data->file_data);
+        rv_io_free_url_to_memory(data->file_data);
         data->file_data = nullptr;
     }
     data->adpcm_data = nullptr;
@@ -363,23 +364,18 @@ static int64_t spu_plugin_seek(void* user_data, int64_t ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static int spu_plugin_metadata(const char* url, const RVService* service_api) {
-    const RVIo* io_api = RVService_get_io(service_api, RV_IO_API_VERSION);
-    const RVMetadata* metadata_api = RVService_get_metadata(service_api, RV_METADATA_API_VERSION);
-
-    if (io_api == nullptr || metadata_api == nullptr) {
-        return -1;
-    }
+    (void)service_api;
 
     RVIoReadUrlResult read_res;
-    if ((read_res = RVIo_read_url_to_memory(io_api, url)).data == nullptr) {
+    if ((read_res = rv_io_read_url_to_memory(url)).data == nullptr) {
         return -1;
     }
 
     uint8_t* file_data = read_res.data;
     size_t file_size = read_res.data_size;
 
-    RVMetadataId id = RVMetadata_create_url(metadata_api, url);
-    RVMetadata_set_tag(metadata_api, id, RV_METADATA_SONGTYPE_TAG, "SPU/VAG");
+    RVMetadataId id = rv_metadata_create_url(url);
+    rv_metadata_set_tag(id, RV_METADATA_SONGTYPE_TAG, "SPU/VAG");
 
     uint32_t sample_rate = SPU_DEFAULT_SAMPLE_RATE;
     size_t adpcm_size = file_size;
@@ -396,7 +392,7 @@ static int spu_plugin_metadata(const char* url, const RVService* service_api) {
         char name[17] = { 0 };
         memcpy(name, file_data + 32, 16);
         if (name[0] != '\0') {
-            RVMetadata_set_tag(metadata_api, id, RV_METADATA_TITLE_TAG, name);
+            rv_metadata_set_tag(id, RV_METADATA_TITLE_TAG, name);
         }
 
         adpcm_size = file_size - SPU_VAG_HEADER_SIZE;
@@ -407,10 +403,10 @@ static int spu_plugin_metadata(const char* url, const RVService* service_api) {
     double total_samples = (double)(total_blocks * SPU_SAMPLES_PER_BLOCK);
     double length_seconds = total_samples / (double)sample_rate;
     if (length_seconds > 0.0) {
-        RVMetadata_set_tag_f64(metadata_api, id, RV_METADATA_LENGTH_TAG, length_seconds);
+        rv_metadata_set_tag_f64(id, RV_METADATA_LENGTH_TAG, length_seconds);
     }
 
-    RVIo_free_url_to_memory(io_api, read_res.data);
+    rv_io_free_url_to_memory(read_res.data);
     return 0;
 }
 
