@@ -36,9 +36,10 @@ target_include_directories(ixalance_static PUBLIC
 
 target_link_libraries(ixalance_static PUBLIC ZLIB::ZLIB)
 
-if(NOT WIN32)
-    target_compile_definitions(ixalance_static PUBLIC LINUX)
-endif()
+# The webixs codebase uses LINUX to mean "modern non-Emscripten build" and gates out
+# Windows-specific code (Win32 audio, File0.h, etc.) that was not ported.
+# Define it on all platforms so the portable code paths are used everywhere.
+target_compile_definitions(ixalance_static PUBLIC LINUX)
 
 suppress_external_warnings(ixalance_static)
 set_target_properties(ixalance_static PROPERTIES
