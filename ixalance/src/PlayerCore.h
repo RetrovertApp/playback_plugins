@@ -15,6 +15,8 @@
 
 #include "Module.h"
 
+struct IxsScopeCapture;
+
 namespace IXS {
 
   typedef struct Channels64 Channels64;
@@ -71,6 +73,8 @@ namespace IXS {
     uint waveStartPos_0x5d638;
 
     bool endReached;  // added feature..
+
+    struct IxsScopeCapture* scopeCapture;  // nullptr when disabled
   };
 
 

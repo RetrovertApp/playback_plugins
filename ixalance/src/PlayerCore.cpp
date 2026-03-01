@@ -9,6 +9,7 @@
 */
 
 #include "PlayerCore.h"
+#include "IxsScopeCapture.h"
 
 #include <math.h>
 
@@ -82,6 +83,7 @@ namespace IXS {
       module = IXS__Module__setPlayerCoreObj_00407b80(module, core);
     }
     core->ptrModule_0x8 = module;
+    core->scopeCapture = nullptr;
     return core;
   }
 
@@ -579,19 +581,50 @@ namespace IXS {
 
 
   void __thiscall IXS__PlayerCore__FUN_00406a90(PlayerCore *core, int n) {
-    core->ptrMixer_0x3224->vftable->clearSampleBuf(core->ptrMixer_0x3224, core->Tempo_0x320c);
+    MixerBase *mixer = core->ptrMixer_0x3224;
+    mixer->vftable->clearSampleBuf(mixer, core->Tempo_0x320c);
     Channel *chnl = &core->channels_0xc.channels[0];
+
+    IxsScopeCapture *sc = core->scopeCapture;
+    bool do_scope = sc && sc->enabled;
+
+    // Number of stereo frames in this block
+    uint block_shorts = 0;
+    if (do_scope) {
+      block_shorts = mixer->blockLen_0x14 / 2;  // blockLen is in bytes, 2 bytes per short
+    }
 
     for (int i = 0; i<64; i++) {
       if (IXS__PlayerCore__readByteAsInt_00406a80((byte *) chnl)) {
-        core->ptrMixer_0x3224->vftable->genChannelOutput(core->ptrMixer_0x3224, &chnl->subBuf80.buf40_0x10);
+        if (do_scope) {
+          // Snapshot the sample buffer before this channel's contribution
+          memcpy(sc->snapshot_buf, mixer->smplBuf16Ptr_0x20, block_shorts * sizeof(short));
+        }
+
+        mixer->vftable->genChannelOutput(mixer, &chnl->subBuf80.buf40_0x10);
+
+        if (do_scope) {
+          // Compute this channel's delta and write to ring buffer
+          short *buf = mixer->smplBuf16Ptr_0x20;
+          short *snap = sc->snapshot_buf;
+          uint stereo_frames = block_shorts / 2;  // 2 shorts per stereo frame
+          int wp = sc->write_pos[i];
+
+          for (uint f = 0; f < stereo_frames; f++) {
+            int delta_l = buf[f * 2] - snap[f * 2];
+            int delta_r = buf[f * 2 + 1] - snap[f * 2 + 1];
+            sc->buffers[i][wp] = (float)(delta_l + delta_r) / 65536.0f;
+            wp = (wp + 1) & (IXS_SCOPE_BUFFER_SIZE - 1);
+          }
+          sc->write_pos[i] = wp;
+        }
       }
       chnl += 1;
     }
 
-    core->ptrMixer_0x3224->vftable->copyToAudioBuf(core->ptrMixer_0x3224, n);
-    core->ptrMixer_0x3224->arrBuf20Ptr_0x38[n].ordIdx_0xc = core->ordIdx_0x3215;
-    core->ptrMixer_0x3224->arrBuf20Ptr_0x38[n].currentRow_0x10 = core->currentRow_0x3216;
+    mixer->vftable->copyToAudioBuf(mixer, n);
+    mixer->arrBuf20Ptr_0x38[n].ordIdx_0xc = core->ordIdx_0x3215;
+    mixer->arrBuf20Ptr_0x38[n].currentRow_0x10 = core->currentRow_0x3216;
   }
 
   void IXS__PlayerCore__FUN_00406b80(Channel *chnl) {
