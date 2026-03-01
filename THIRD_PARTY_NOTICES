@@ -43,6 +43,9 @@ Plugin: gme
 Plugin: hively
   - Hively Tracker replay (BSD-3-Clause) - bundled from zxtune project
 
+Plugin: ixalance
+  - webixs (CC BY-NC-SA 4.0) - https://bitbucket.org/wothke/webixs
+
 Plugin: klystrack
   - klystron (MIT) - https://github.com/kometbomb/klystron
 
@@ -145,6 +148,9 @@ The following license types are used by third-party dependencies:
 
   Public Domain / MIT-0:
     dr_libs (dr_flac, dr_wav, dr_mp3), stb_vorbis, adpcm
+
+  CC BY-NC-SA 4.0:
+    webixs
 
   Custom permissive:
     libpxtone, sunvox (SunVox library - free with attribution)
