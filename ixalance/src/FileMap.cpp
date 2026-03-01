@@ -13,10 +13,31 @@
 
 #if defined(EMSCRIPTEN) || defined(LINUX)
 #include <fcntl.h>
-#include <sys/mman.h>
 #include <stdio.h>
 #include <sys/stat.h>
-#include <unistd.h> // read/write
+#ifdef _WIN32
+#include <io.h>
+#include <stdlib.h>
+// Windows POSIX compatibility wrappers
+static int ixs_open(const char *path, int flags, int mode) {
+    return _open(path, flags | _O_BINARY, mode);
+}
+#define open ixs_open
+#define close _close
+#define read _read
+#define write _write
+#define lseek _lseek
+#define fstat _fstat
+#define stat _stat
+#define S_IRUSR _S_IREAD
+#define S_IWUSR _S_IWRITE
+#define S_IRGRP 0
+#define S_IROTH 0
+typedef int mode_t;
+#else
+#include <sys/mman.h>
+#include <unistd.h>
+#endif
 
 #endif
 
@@ -199,7 +220,11 @@ namespace IXS {
 //      CloseHandle(map->mapHandle);
 //    }
     if (map->memAddr != (void *) nullptr) {
+#ifdef _WIN32
+      free(map->memAddr);
+#else
       munmap(map->memAddr, size);
+#endif
     }
     close(map->fileHandle);
   }
@@ -273,21 +298,38 @@ namespace IXS {
 
     uint size= IXS__FileMap__getFileSize_00413740(map);
 
+#ifdef _WIN32
+    // No mmap on Windows - read file into allocated buffer
+    byte *memAddr = (byte *)malloc(size);
+    if (memAddr == nullptr) {
+      map->memAddr = nullptr;
+      return nullptr;
+    }
+    long savedPos = lseek(map->fileHandle, 0, SEEK_CUR);
+    lseek(map->fileHandle, 0, SEEK_SET);
+    int bytesRead = read(map->fileHandle, memAddr, size);
+    lseek(map->fileHandle, savedPos, SEEK_SET);
+    if (bytesRead < 0 || (uint)bytesRead != size) {
+      free(memAddr);
+      map->memAddr = nullptr;
+      return nullptr;
+    }
+    map->memAddr = memAddr;
+    return memAddr;
+#else
     // read/write
-//    handle = CreateFileMappingA(map->fileHandle, (LPSECURITY_ATTRIBUTES) nullptr, 0x8000004, 0, 0, (char *) nullptr);
     void *memAddr = mmap(NULL,size, PROT_READ|PROT_WRITE,MAP_PRIVATE, map->fileHandle,0);
     if(memAddr == MAP_FAILED) {
       // readonly
-//      handle = CreateFileMappingA(map->fileHandle, (LPSECURITY_ATTRIBUTES) nullptr, 0x8000002, 0, 0, (char *) nullptr);
       memAddr = mmap(NULL,size, PROT_READ,MAP_PRIVATE, map->fileHandle,0);
       if(memAddr == MAP_FAILED) {
         map->memAddr = nullptr;
         return nullptr;
       }
     }
-//      memAddr = (byte *) MapViewOfFile(handle, 4, 0, 0, 0);
     map->memAddr = (byte*)memAddr;
     return (byte*)memAddr;
+#endif
   }
 
 
