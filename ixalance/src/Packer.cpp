@@ -98,33 +98,29 @@ namespace IXS {
     packer->lenCount_0x50 = 0;
     packer->zlib_status_0x3c = 0;
     packer->abortFlag_0x40 = '\0';
-    deflateInit_((packer ? (z_streamp) z : (z_streamp) nullptr), level, ZLIB_VERSION, 0x38);
+    deflateInit_(z, level, ZLIB_VERSION, sizeof(z_stream));
     if (packer->abortFlag_0x40 == '\0') {
       do {
         iVar2 = IXS__Packer__writeDestBuffer_0x40cd30(packer);
         if (iVar2 == 0) break;
-        uVar3 = deflate((packer ? (z_streamp) z : (z_streamp) nullptr), 0);
+        uVar3 = deflate(z, 0);
         packer->zlib_status_0x3c = uVar3;
         IXS__Packer__readSrcBuffer_0x40cd90(packer);
         if (packer->zlib_status_0x3c != 0) break;
-//        vftable = packer->vftptr_0x0;
         dVar4 = IXS__Packer__completion_0x40ce00(packer);
-        //     (*vftable->fn3_maybeTraceLog)((uint)obj,SUB84(dVar4,0),(uint)((uint64)dVar4 >> 0x20));
       } while (packer->abortFlag_0x40 == '\0');
       cVar1 = packer->abortFlag_0x40;
       while (cVar1 == '\0') {
-        uVar3 = deflate((packer ? (z_streamp) z : (z_streamp) nullptr), 4);
+        uVar3 = deflate(z, 4);
         packer->zlib_status_0x3c = uVar3;
         uVar3 = IXS__Packer__readSrcBuffer_0x40cd90(packer);
         if ((uVar3 == 0) || (packer->zlib_status_0x3c != 0)) break;
         cVar1 = packer->abortFlag_0x40;
       }
     }
-//    vftable = packer->vftptr_0x0;
     dVar4 = IXS__Packer__completion_0x40ce00(packer);
-//  (*vftable->fn3_maybeTraceLog)((uint)obj,SUB84(dVar4,0),(uint)((uint64)dVar4 >> 0x20));
 
-    deflateEnd((packer ? (z_streamp) z : (z_streamp) nullptr));
+    deflateEnd(z);
     bytesArray = packer->byteArray_0x48;
     return bytesArray;
   }
@@ -160,31 +156,28 @@ namespace IXS {
     packer->lenCount_0x50 = 0;
     packer->zlib_status_0x3c = 0;
     packer->abortFlag_0x40 = '\0';
-    inflateInit_
-            ((packer ? (z_streamp) z : (z_streamp) nullptr), ZLIB_VERSION, 0x38);
+    inflateInit_(z, ZLIB_VERSION, sizeof(z_stream));
     if (packer->abortFlag_0x40 == '\0') {
       do {
         writtenBytes = IXS__Packer__writeDestBuffer_0x40cd30(packer);
         if (writtenBytes == 0) break;
-        zStatus = inflate((packer ? (z_streamp) z : (z_streamp) nullptr), 0);
+        zStatus = inflate(z, 0);
         packer->zlib_status_0x3c = zStatus;
         IXS__Packer__readSrcBuffer_0x40cd90(packer);
         if (packer->zlib_status_0x3c != 0) break;
-//        vfTab = packer->vftptr_0x0;
         dVar1 = IXS__Packer__completion_0x40ce00(packer);
       } while (packer->abortFlag_0x40 == '\0');
       abortFlag = packer->abortFlag_0x40;
       while (abortFlag == '\0') {
-        zStatus = inflate((packer ? (z_streamp) z : (z_streamp) nullptr), 4);
+        zStatus = inflate(z, 4);
         packer->zlib_status_0x3c = zStatus;
         zStatus = IXS__Packer__readSrcBuffer_0x40cd90(packer);
         if ((zStatus == 0) || (packer->zlib_status_0x3c != 0)) break;
         abortFlag = packer->abortFlag_0x40;
       }
     }
-//    vfTab = packer->vftptr_0x0;
     dVar1 = IXS__Packer__completion_0x40ce00(packer);
-    inflateEnd((packer ? (z_streamp) z : (z_streamp) nullptr));
+    inflateEnd(z);
     byteArray = packer->byteArray_0x48;
     return byteArray;
   }
@@ -209,7 +202,7 @@ namespace IXS {
         (packer->zstream_0x4).avail_in = 0x1000;
       }
       len = (packer->zstream_0x4).avail_in;
-      src = (byte *) byteArray->bufPtr_0x0 + offset;
+      src = (byte *) ((uintptr_t) byteArray->bufPtr_0x0 + offset);
       dest = (byte *) packer->destBuffer4096_0x54;
 
       memcpy(dest, src, len);
@@ -233,7 +226,7 @@ namespace IXS {
     if (len != 0) {
       IXS__ByteArray__Z_resize_0x40f060(packer->byteArray_0x48, packer->byteArray_0x48->bufSize_0x4 + len);
       src = packer->srcBuffer4096_0x1054;
-      dest = (byte *) packer->byteArray_0x48->bufPtr_0x0 + packer->lenCount_0x50;
+      dest = (byte *) ((uintptr_t) packer->byteArray_0x48->bufPtr_0x0 + packer->lenCount_0x50);
 
       memcpy(dest, src, len);
 

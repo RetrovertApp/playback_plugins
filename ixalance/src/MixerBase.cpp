@@ -52,7 +52,9 @@ namespace IXS {
 
   void __fastcall IXS__MixerBase__ctor_004098b0(MixerBase *mixer) {
     mixer->circAudioOutBuffer_0x1c = (byte *) nullptr;
+    mixer->smplBuf16Ptr_0x20 = nullptr;
     mixer->outputVolume_0x24 = 1.0f;
+    mixer->arrBuf20Ptr_0x38 = nullptr;
     mixer->vftable = &IXS_MYSTBASE_VFTAB_0042ffe8;
   }
 
@@ -73,12 +75,14 @@ namespace IXS {
 
     uint len = d * v5; // todo: use round?
     mixer->sampleBuf16Length_0xc = len;  // e.g. 14700
-    mixer->smplBuf16Ptr_0x20 = (short *) malloc(2 * len);
+    if (mixer->smplBuf16Ptr_0x20 == nullptr)
+      mixer->smplBuf16Ptr_0x20 = (short *) malloc(2 * len);
 
     int bufLen = 0x80000 / mixer->sampleBuf16Length_0xc;
     mixer->arrBuf20Len_0x28 = bufLen;  // e.g. 35
 
-    mixer->arrBuf20Ptr_0x38 = (Buf20 *) malloc(20 * bufLen);  // e.g.len 700
+    if (mixer->arrBuf20Ptr_0x38 == nullptr)
+      mixer->arrBuf20Ptr_0x38 = (Buf20 *) malloc(20 * bufLen);  // e.g.len 700
 
     if ((int) mixer->arrBuf20Len_0x28 > 0) {
       int i = 0;
@@ -98,6 +102,12 @@ namespace IXS {
     operator delete((LPVOID) mixer->smplBuf16Ptr_0x20);
 
 //    _GlobalFree(mixer->circAudioOutBuffer_0x1c);  // moved responsibility to PlayerCore
+
+#if defined(EMSCRIPTEN) || defined(LINUX)
+    free(DIRECT_AUDIOBUFFER);
+    DIRECT_AUDIOBUFFER = nullptr;
+    DIRECT_AUDIOBUFFER_SIZE = 0;
+#endif
   }
 
 

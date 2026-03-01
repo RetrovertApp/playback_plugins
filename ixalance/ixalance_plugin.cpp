@@ -423,7 +423,9 @@ static int ixalance_get_tracker_info(void* user_data, RVTrackerInfo* info) {
     info->num_orders = module->impulseHeader_0x0.OrdNum_0x20;
     info->num_samples = module->impulseHeader_0x0.SmpNum_0x24;
     info->current_pattern = core->order_0x3214;
-    info->current_row = core->currentRow_0x3216;
+    // currentRow_0x3216 is incremented after processing each row's data,
+    // so it represents the *next* row to process, not the one currently playing.
+    info->current_row = core->currentRow_0x3216 > 0 ? core->currentRow_0x3216 - 1 : 0;
     info->current_order = core->ordIdx_0x3215;
     info->channels_synchronized = 1;
 

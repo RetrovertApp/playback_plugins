@@ -72,7 +72,7 @@ namespace IXS {
     uint startTimeMs_0x5d634;
     uint waveStartPos_0x5d638;
 
-    bool endReached;  // added feature..
+    uint32_t endReached;  // incremented each time song loops
 
     struct IxsScopeCapture* scopeCapture;  // nullptr when disabled
   };

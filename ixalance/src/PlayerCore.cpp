@@ -80,10 +80,10 @@ namespace IXS {
     if (module == (Module *) nullptr) {
       module = (Module *) nullptr;
     } else {
+      memset(module, 0, sizeof(Module));
       module = IXS__Module__setPlayerCoreObj_00407b80(module, core);
     }
     core->ptrModule_0x8 = module;
-    core->scopeCapture = nullptr;
     return core;
   }
 
@@ -236,7 +236,7 @@ namespace IXS {
     byte order;
     Module *module;
 
-    core->endReached = false;
+    core->endReached = 0;
 
     module = core->ptrModule_0x8;
     core->Tempo_0x320c = (module->impulseHeader_0x0).Tempo_0x33;
@@ -287,6 +287,18 @@ namespace IXS {
             i = i + 1;
           } while (i < (int) core->ptrMixer_0x3224->arrBuf20Len_0x28);
         }
+
+#if defined(EMSCRIPTEN) || defined(LINUX)
+        // The pre-fill loop above is for the Windows circular audio buffer.
+        // On LINUX/EMSCRIPTEN we use direct output, so reset the tracker
+        // position that was advanced during pre-fill.
+        core->currentRow_0x3216 = 0;
+        core->ordIdx_0x3215 = 0;
+        core->Speed_0x320e = speed;
+        core->Speed_0x320d = speed;
+        core->ordIdx_rowIdx_0x3218 = 0;
+        *(uint *) &(core->byteInt_0x3210.b1) = 0x0;
+#endif
 
 #if !defined(EMSCRIPTEN) && !defined(LINUX)
         if (core->isMMOutDisabled_0x0 == 0) {
@@ -473,7 +485,7 @@ namespace IXS {
           core->ordIdx_0x3215 = 0;
           core->waveStartPos_0x5d638 = mixer->audioOutBufPos_0x10 + (mixer->outBufOverflowCount_0x18 << 19);
 
-          core->endReached = true;
+          core->endReached++;
         }
       } while (module->ordersBuffer_0xc8[core->ordIdx_0x3215] == 0xfe); // Skip to next order
 
@@ -899,7 +911,7 @@ namespace IXS {
     // todo: find where the -0x1000 offset comes from..
 
     // note: range of the float values is 0.031250->31.971132
-    float f= *(float *) ((intptr_t) (byte *) core->floatArrays12x7680_0x3634 - 0x1000 +
+    float f= *(float *) ((uintptr_t) (byte *) core->floatArrays12x7680_0x3634 - 0x1000 +
                          ((uint) chnl->byte_0x2e * 0x20 + chnl->floatTableOffset_0x1c) * 4);
 
     // C5 supposedly ranges: 0->9999999   .. i.e. max below is 0x1312CFE0 (no 64-bit needed)
@@ -1298,6 +1310,7 @@ namespace IXS {
     }
     mod = (Module *) malloc(sizeof(Module));
     if (mod != (Module *) nullptr) {
+      memset(mod, 0, sizeof(Module));
       mod = IXS__Module__setPlayerCoreObj_00407b80(mod, core);
       core->ptrModule_0x8 = mod;
       return mod;

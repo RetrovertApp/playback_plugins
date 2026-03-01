@@ -43,7 +43,7 @@ namespace IXS {
   uint IXS__PlayerIXS__getSampleRate();
   void IXS__PlayerIXS__setMixer(PlayerIXS *player, bool filterOn);
 
-  bool IXS__PlayerIXS__isSongEnd(PlayerIXS *player) {
+  uint32_t IXS__PlayerIXS__isSongEnd(PlayerIXS *player) {
     return player->ptrCore_0x4->endReached;
   }
 
@@ -107,6 +107,7 @@ namespace IXS {
     player->vftable = &IXS_PLAYERIXS_VFTAB_0042fed8;
 
     PlayerCore *core = (PlayerCore *) malloc(sizeof(PlayerCore));
+    memset(core, 0, sizeof(PlayerCore));
     core = IXS__PlayerCore__ctor_addModule_004063b0(core);
     core->ptrMixer_0x3224 = nullptr;
 

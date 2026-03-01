@@ -10,6 +10,7 @@
 
 #include "Mixer2.h"
 #include "asmEmu.h"
+#include <string.h>
 
 namespace IXS {
 
@@ -24,6 +25,7 @@ namespace IXS {
   MixerBase *IXS__Mixer2__ctor(byte *audioOutBuffer) {
     MixerBase *mixer = (MixerBase *) malloc(sizeof(MixerBase));
     if (mixer != (MixerBase *) nullptr) {
+      memset(mixer, 0, sizeof(MixerBase));
       IXS__MixerBase__ctor_004098b0(mixer);
       mixer->vftable = &IXS_MIX2_VFTAB_0042ff6c;
       mixer->circAudioOutBuffer_0x1c = audioOutBuffer;

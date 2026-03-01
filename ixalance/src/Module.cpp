@@ -424,9 +424,7 @@ namespace IXS {
     char songTitle[32];
     IXS__Module__copyFromInputFile_00409370(module, songTitle, 0x20); // the "song title"
 
-#ifndef EMSCRIPTEN
-    fprintf(stderr, "loading: %s\n", songTitle);
-#else
+#ifdef EMSCRIPTEN
     sprintf(MSG_BUFFER, "loading: %s\n", songTitle);
     JS_printStatus(MSG_BUFFER);
 #endif
@@ -436,13 +434,36 @@ namespace IXS {
     packedData->bufSize_0x4 = packedLen;
 
     Packer *packer = IXS__Packer__ctor_0040cea0();
+    ByteArray *inputByteArray = packedData;  // save ref before inflate reassigns
     packedData = (*packer->vftptr_0x0->fn2_inflate)(packer, packedData);
     int *inflatedData = packedData->bufPtr_0x0;
+    uint inflatedSize = packedData->bufSize_0x4;
+
+    if (inflatedData == nullptr || inflatedSize == 0) {
+      fprintf(stderr, "error: decompression failed for IXS file\n");
+      if (packer != (Packer *) nullptr) {
+        IXS__Packer__dtor_0x40ca60(packer);
+        operator delete(packer);
+      }
+      return 1;
+    }
+
+    if (itHeadOffset >= inflatedSize || (uint)offset1 >= inflatedSize ||
+        offset2 >= inflatedSize || offset2 < (uint)offset1 ||
+        (uint)offset1 + 4 > inflatedSize || offset2 + 1 > inflatedSize) {
+      fprintf(stderr, "error: IXS file has invalid offsets (inflated=%u, itHead=%u, off1=%d, off2=%u)\n",
+              inflatedSize, itHeadOffset, offset1, offset2);
+      if (packer != (Packer *) nullptr) {
+        IXS__Packer__dtor_0x40ca60(packer);
+        operator delete(packer);
+      }
+      return 1;
+    }
 
     // the inflatedData seems to be filled with 3 consecutive sections:
-    byte *itFileHead = (byte *) inflatedData + itHeadOffset;  // tracker data
-    byte *dataBuf1 = (byte *) inflatedData + offset1;         // input for "regular samples"
-    byte *dataBuf2 = (byte *) inflatedData + offset2;          // input for "synth samples"
+    byte *itFileHead = (byte *) ((uintptr_t) inflatedData + itHeadOffset);  // tracker data
+    byte *dataBuf1 = (byte *) ((uintptr_t) inflatedData + offset1);         // input for "regular samples"
+    byte *dataBuf2 = (byte *) ((uintptr_t) inflatedData + offset2);          // input for "synth samples"
 
     IXS_loadTotalLen_0043b898 = (float) ((int) (char) *dataBuf2 + *(int*)dataBuf1);
 
@@ -451,6 +472,12 @@ namespace IXS {
     int retVal= loadIxsInputFileData(module, filename, itFileHead, dataBuf1, offset2-offset1,
                                      dataBuf2, packedData->bufSize_0x4-offset2, outputVolume,
                                      smplFile, tmpFile);
+
+    // Free inflated data and ByteArray objects
+    free(packedData->bufPtr_0x0);
+    free(packedData);
+    // inputByteArray's bufPtr points into the input file buffer (not malloc'd), so don't free it
+    free(inputByteArray);
 
     if (packer != (Packer *) nullptr) {
       IXS__Packer__dtor_0x40ca60(packer);
@@ -533,8 +560,9 @@ namespace IXS {
     int i2 = 0;
     if (!num) {
       do {
-        module->insPtrArray_0xcc[i1] = (ITInstrument *) malloc(557);
+        module->insPtrArray_0xcc[i1] = (ITInstrument *) malloc(sizeof(ITInstrument));
         ITInstrument *ins1 = module->insPtrArray_0xcc[i1];
+        memset(ins1, 0, sizeof(ITInstrument));
         if ((byte) IXS__Module__readByte_0x409320(module) == 'i') {
           byte *kbPtr0 = &ins1->keyboard_0x40[1];
           int n = 120;
@@ -599,9 +627,10 @@ namespace IXS {
     int idx = 0;
     if (!num) {
       do {
-        module->smplHeadPtrArr0_0xd0[smplIdx] = (ITSample *) malloc(0x50);
+        module->smplHeadPtrArr0_0xd0[smplIdx] = (ITSample *) malloc(sizeof(ITSample));
         module->smplDataPtrArr_0xd4[smplIdx] = 0;
         ITSample *smplHeadPtr = module->smplHeadPtrArr0_0xd0[smplIdx];
+        memset(smplHeadPtr, 0, sizeof(ITSample));
 
         char s = (char) IXS__Module__readByte_0x409320(module);
         if (s == 's') {
@@ -704,7 +733,7 @@ namespace IXS {
     module->lastOrder_0xfaec = -1;
     if (!num) {
       do {
-        module->patHeadPtrArray_0xd8[ii] = (ITPatternHead *) malloc(8);
+        module->patHeadPtrArray_0xd8[ii] = (ITPatternHead *) malloc(sizeof(ITPatternHead));
         ITPatternHead *patHeadPtr = module->patHeadPtrArray_0xd8[ii];
         module->patDataPtrArray_0xdc[ii] = 0;
         if ((byte) IXS__Module__readByte_0x409320(module) != 'p') {
@@ -760,7 +789,7 @@ namespace IXS {
     if (insNum != 0) {
       int i = 0;
       do {
-        module->insPtrArray_0xcc[i] = (ITInstrument *) malloc(0x22d);
+        module->insPtrArray_0xcc[i] = (ITInstrument *) malloc(sizeof(ITInstrument));
         ITInstrument *ins = module->insPtrArray_0xcc[i];
 
         IXS__Module__skipInput_004092d0(module, inputFileBuffer, insOffsets[i]);
@@ -783,7 +812,7 @@ namespace IXS {
     if (smplNum != 0) {
       int i = 0;
       do {
-        module->smplHeadPtrArr0_0xd0[i] = (ITSample *) malloc(0x50);
+        module->smplHeadPtrArr0_0xd0[i] = (ITSample *) malloc(sizeof(ITSample));
         ITSample *smpl = module->smplHeadPtrArr0_0xd0[i];
 
         module->smplDataPtrArr_0xd4[i] = (byte *) nullptr;
@@ -807,7 +836,7 @@ namespace IXS {
     if (patNum != 0) {
       int i = 0;
       do {
-        module->patHeadPtrArray_0xd8[i] = (ITPatternHead *) malloc(8);
+        module->patHeadPtrArray_0xd8[i] = (ITPatternHead *) malloc(sizeof(ITPatternHead));
         ITPatternHead *patHead = module->patHeadPtrArray_0xd8[i];
 
         if (patOffsets[i] != 0) {
@@ -856,7 +885,7 @@ namespace IXS {
     if (patData != (byte *) nullptr) {
       i = 0;
       if (patHead->rows_0x2 != 0) {
-        char *dest = (char *) ((intptr_t) (module->buf16k_0xe0).buf_0x0 + 2);
+        char *dest = (char *) ((uintptr_t) (module->buf16k_0xe0).buf_0x0 + 2);
         do {
           *dest = -1;
           i = i + 1;
@@ -909,7 +938,7 @@ namespace IXS {
 
             b = patData[idx];
             idx = idx + 1;
-            *(byte *) ((intptr_t) buf16k->buf_0x0 + i * 5) = b;
+            *(byte *) ((uintptr_t) buf16k->buf_0x0 + i * 5) = b;
             ((Body64x5 *) (&local_180.head + 1))->blocks[channel].note_0x0 = b;
           }
           if ((local_180.head.byteArray_0x0[channel] & 2) != 0) {
@@ -918,7 +947,7 @@ namespace IXS {
 
             b = patData[idx];
             idx = idx + 1;
-            *(byte *) ((intptr_t) buf16k->buf_0x0 + i * 5 + 1) = b;
+            *(byte *) ((uintptr_t) buf16k->buf_0x0 + i * 5 + 1) = b;
             ((Body64x5 *) (&local_180.head + 1))->blocks[channel].numIns_0x1 = b;
           }
           if ((local_180.head.byteArray_0x0[channel] & 4) != 0) {
@@ -928,7 +957,7 @@ namespace IXS {
 
             char c = *(char *) &patData[idx];
             idx = idx + 1;
-            *(char *) ((intptr_t) buf16k->buf_0x0 + i * 5 + 2) = c;
+            *(char *) ((uintptr_t) buf16k->buf_0x0 + i * 5 + 2) = c;
             ((Body64x5 *) (&local_180.head + 1))->blocks[channel].vol_pan_0x2 = c;
           }
           i1 = idx;
@@ -940,26 +969,26 @@ namespace IXS {
             i1 = idx + 2;
             b = patData[idx];
             ((Body64x5 *) (&local_180.head + 1))->blocks[channel].cmd_0x3 = b;
-            *(byte *) ((intptr_t) buf16k->buf_0x0 + i * 5 + 3) = b;
+            *(byte *) ((uintptr_t) buf16k->buf_0x0 + i * 5 + 3) = b;
 
             b = patData[idx + 1];
-            *(byte *) ((intptr_t) buf16k->buf_0x0 + i * 5 + 4) = b;
+            *(byte *) ((uintptr_t) buf16k->buf_0x0 + i * 5 + 4) = b;
             ((Body64x5 *) (&local_180.head + 1))->blocks[channel].cmdArg_0x4 = b;
           }
           if ((local_180.head.byteArray_0x0[channel] & 0x10) != 0) {
             // if(maskvariable & 16), then note = lastnote for channel
 
-            *(byte *) ((intptr_t) buf16k->buf_0x0 + i * 5) =
+            *(byte *) ((uintptr_t) buf16k->buf_0x0 + i * 5) =
                     ((Body64x5 *) (&local_180.head + 1))->blocks[channel].note_0x0;
           }
           if ((local_180.head.byteArray_0x0[channel] & 0x20) != 0) {
             //  if(maskvariable & 32), then instrument = lastinstrument for channel
-            *(byte *) ((intptr_t) buf16k->buf_0x0 + i * 5 + 1) =
+            *(byte *) ((uintptr_t) buf16k->buf_0x0 + i * 5 + 1) =
                     ((Body64x5 *) (&local_180.head + 1))->blocks[channel].numIns_0x1;
           }
           if ((local_180.head.byteArray_0x0[channel] & 0x40) != 0) {
             // if(maskvariable & 64), then volume/pan = lastvolume/pan for channel
-            *(char *) ((intptr_t) buf16k->buf_0x0 + i * 5 + 2) =
+            *(char *) ((uintptr_t) buf16k->buf_0x0 + i * 5 + 2) =
                     ((Body64x5 *) (&local_180.head + 1))->blocks[channel].vol_pan_0x2;
           }
           if ((local_180.head.byteArray_0x0[channel] & 0x80) != 0) {
@@ -969,9 +998,9 @@ namespace IXS {
             //  }
 
             b = ((Body64x5 *) (&local_180.head + 1))->blocks[channel].cmdArg_0x4;
-            *(byte *) ((intptr_t) buf16k->buf_0x0 + i * 5 + 3) =
+            *(byte *) ((uintptr_t) buf16k->buf_0x0 + i * 5 + 3) =
                     ((Body64x5 *) (&local_180.head + 1))->blocks[channel].cmd_0x3;
-            *(byte *) ((intptr_t) buf16k->buf_0x0 + i * 5 + 4) = b;
+            *(byte *) ((uintptr_t) buf16k->buf_0x0 + i * 5 + 4) = b;
           }
         }
         i = i1;

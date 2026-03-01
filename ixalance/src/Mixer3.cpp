@@ -10,6 +10,7 @@
 
 #include "Mixer3.h"
 #include "asmEmu.h"
+#include <string.h>
 
 // todo: this impl still seems to have clamping issues leading to clicks in the output
 // check if this was merely meant as a performance optimization (as compared to Mixer2)
@@ -33,6 +34,7 @@ namespace IXS {
   MixerBase *IXS__Mixer3__ctor(byte *audioOutBuffer) {
     MixerBase *mixer = (MixerBase *) malloc(sizeof(MixerBase));
     if (mixer != (MixerBase *) nullptr) {
+      memset(mixer, 0, sizeof(MixerBase));
       IXS__MixerBase__ctor_004098b0(mixer);
       mixer->vftable = &IXS_MIX3_VFTAB_0042ff80;
       mixer->circAudioOutBuffer_0x1c = audioOutBuffer;

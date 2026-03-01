@@ -1065,9 +1065,7 @@ namespace IXS {
 
     WaveGen* wavegen = IXS__WAVEGEN__getInstance();
 
-#ifndef EMSCRIPTEN
-    fprintf(stderr, "generating regular samples\n");
-#else
+#ifdef EMSCRIPTEN
     sprintf(MSG_BUFFER, "generating regular samples\n");
     JS_printStatus(MSG_BUFFER);
 #endif
@@ -1171,9 +1169,7 @@ namespace IXS {
           // append the extracted wave files to the cache file
 
           if (!local1500.someInt_0x0.b3 || local1500.someInt_0x0.b2) {
-#ifndef EMSCRIPTEN
-            fprintf(stderr, "   stereo: %s\n", sampleName.c_str());
-#else
+#ifdef EMSCRIPTEN
             sprintf(MSG_BUFFER, "   stereo: %s\n", sampleName.c_str());
             JS_printStatus(MSG_BUFFER);
 #endif
@@ -1192,9 +1188,7 @@ namespace IXS {
             smplFileR->vftable->deleteObj(smplFileR);
 
           } else {
-#ifndef EMSCRIPTEN
-            fprintf(stderr, "   mono:   %s\n", sampleName.c_str());
-#else
+#ifdef EMSCRIPTEN
             sprintf(MSG_BUFFER, "   mono:   %s\n", sampleName.c_str());
             JS_printStatus(MSG_BUFFER);
 #endif
@@ -1565,15 +1559,14 @@ namespace IXS {
     mapSFXI->vftable->writeFile(mapSFXI, (byte *) sDest, 2 * len);
     (mapSFXI->vftable->deleteObj)(mapSFXI);
 
-#ifndef EMSCRIPTEN
-    fprintf(stderr, "   stereo: %s\n", sampleName.c_str());
-#else
+#ifdef EMSCRIPTEN
     sprintf(MSG_BUFFER, "   stereo: %s\n", sampleName.c_str());
     JS_printStatus(MSG_BUFFER);
 #endif
 
     free (sDest);
     free (local_e8.bufn4096_0x1c);
+    free (local_e8.floatPtrB_0x40);
 
     return local_e8.uint_0x48;
   }
@@ -1593,9 +1586,7 @@ namespace IXS {
     src = srcBuf + 1;
     if (*srcBuf) {
       len = *srcBuf;
-#ifndef EMSCRIPTEN
-      fprintf(stderr, "generating synth samples\n");
-#else
+#ifdef EMSCRIPTEN
       sprintf(MSG_BUFFER, "generating synth samples\n");
       JS_printStatus(MSG_BUFFER);
 #endif
@@ -1977,9 +1968,15 @@ namespace IXS {
     IXS__WAVEGEN__writeRecordedSamples_0x408020(&module, dataBuf1, fileSFXI);
     IXS__WAVEGEN__writeSynthSamples_0040dcb0(dataBuf2, fileSFXI);
 
-#ifndef EMSCRIPTEN
-    fprintf(stderr, "sample generation completed\n\n");
-#else
+    // Clean up WaveGen instance and its allocated arrays
+    if (IXS_WAVEGEN_PTR != nullptr) {
+      free(IXS_WAVEGEN_PTR->someFloatArray_0x14);
+      free(IXS_WAVEGEN_PTR->someFloatArray_0x18);
+      delete IXS_WAVEGEN_PTR;
+      IXS_WAVEGEN_PTR = nullptr;
+    }
+
+#ifdef EMSCRIPTEN
     sprintf(MSG_BUFFER, "sample generation completed\n\n");
     JS_printStatus(MSG_BUFFER);
 #endif

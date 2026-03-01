@@ -66,7 +66,7 @@ namespace IXS {
 #endif
     byte *(*outputTrackerFile)(struct PlayerIXS *, uint);
 
-    bool (*isSongEnd)(struct PlayerIXS *);  // added feature
+    uint32_t (*isSongEnd)(struct PlayerIXS *);  // incremented each time song loops
   };
 
   struct PlayerIXS {
