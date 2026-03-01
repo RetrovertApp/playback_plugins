@@ -11,6 +11,9 @@ Plugin: adplug
   - AdPlug 2.4 (LGPL-2.1) - https://github.com/adplug/adplug
   - libbinio 1.5 (LGPL-2.1) - https://github.com/adplug/libbinio
 
+Plugin: art_of_noise
+  - NostalgicPlayer (MIT) - https://github.com/neumatho/NostalgicPlayer
+
 Plugin: asap
   - ASAP - Another Slight Atari Player (GPL-2.0-or-later) - https://asap.sourceforge.net
 
@@ -126,7 +129,7 @@ The following license types are used by third-party dependencies:
     zxtune
 
   MIT:
-    klystron, libkss (+ emu modules), psflib, fmt, sunvox (lib_sundog)
+    klystron, libkss (+ emu modules), NostalgicPlayer, psflib, fmt, sunvox (lib_sundog)
 
   BSD-2-Clause:
     98fmplayer
