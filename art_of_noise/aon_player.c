@@ -374,13 +374,15 @@ typedef struct {
 typedef struct {
     // Current waveform being played
     i8* sample_data;
-    u32 sample_offset; // byte offset into sample_data
-    u32 sample_length; // total length in bytes from offset
+    u32 sample_offset;   // byte offset into sample_data
+    u32 sample_length;   // total length in bytes from offset
+    u32 sample_buf_size; // total allocation size of sample_data buffer
 
     // Loop
     i8* loop_data;
     u32 loop_offset;
-    u32 loop_length; // in bytes
+    u32 loop_length;   // in bytes
+    u32 loop_buf_size; // total allocation size of loop_data buffer
     bool has_loop;
     bool playing;
 
@@ -405,6 +407,7 @@ struct AonSong {
     u8 num_positions;
     u8 restart_position;
     u8* position_list;
+    u32 position_list_size;
 
     AonPattern* patterns;
     u8 num_patterns;
@@ -486,6 +489,18 @@ static u32 read_be32(const u8* p) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Look up total allocation size for a waveform pointer
+
+static u32 aon_waveform_buf_size(const AonSong* song, const i8* wf) {
+    for (int i = 0; i < song->num_waveforms; i++) {
+        if (song->waveforms[i] == wf) {
+            return song->waveform_lengths[i];
+        }
+    }
+    return 0;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // File loader: parse IFF chunks
 
 static bool aon_load(AonSong* song, const u8* data, u32 size) {
@@ -519,8 +534,9 @@ static bool aon_load(AonSong* song, const u8* data, u32 size) {
         u32 chunk_size = read_be32(data + pos + 4);
         pos += 8;
 
-        if (pos + chunk_size > size) {
-            fprintf(stderr, "AoN: chunk '%s' extends past end of file\n", chunk_name);
+        // Reject zero-size chunks (would cause infinite loop) and overflow
+        if (chunk_size == 0 || chunk_size > size - pos) {
+            fprintf(stderr, "AoN: chunk '%s' has invalid size %u\n", chunk_name, chunk_size);
             break;
         }
 
@@ -553,18 +569,25 @@ static bool aon_load(AonSong* song, const u8* data, u32 size) {
             }
             has_arpg = true;
         } else if (memcmp(chunk_name, "PLST", 4) == 0) {
+            free(song->position_list); // Free any previous duplicate PLST chunk
             song->position_list = (u8*)malloc(chunk_size);
             if (!song->position_list) {
                 return false;
             }
             memcpy(song->position_list, chunk, chunk_size);
+            song->position_list_size = chunk_size;
             has_plst = true;
         } else if (memcmp(chunk_name, "PATT", 4) == 0) {
             u32 bytes_per_pattern = 4 * song->num_channels * 64;
             if (bytes_per_pattern == 0) {
                 return false;
             }
+            free(song->patterns); // Free any previous duplicate PATT chunk
             song->num_patterns = (u8)(chunk_size / bytes_per_pattern);
+            if (song->num_patterns == 0) {
+                song->patterns = nullptr;
+                return false;
+            }
             song->patterns = (AonPattern*)calloc(song->num_patterns, sizeof(AonPattern));
             if (!song->patterns) {
                 return false;
@@ -590,6 +613,7 @@ static bool aon_load(AonSong* song, const u8* data, u32 size) {
             }
             has_patt = true;
         } else if (memcmp(chunk_name, "INST", 4) == 0) {
+            free(song->instruments); // Free any previous duplicate INST chunk
             song->num_instruments = (u8)(chunk_size / 32);
             song->instruments = (AonInstrument*)calloc(song->num_instruments, sizeof(AonInstrument));
             if (!song->instruments) {
@@ -650,6 +674,14 @@ static bool aon_load(AonSong* song, const u8* data, u32 size) {
                 }
             }
         } else if (memcmp(chunk_name, "WLEN", 4) == 0) {
+            // Free any previous duplicate WLEN chunk
+            if (song->waveforms) {
+                for (int i = 0; i < song->num_waveforms; i++) {
+                    free(song->waveforms[i]);
+                }
+                free(song->waveforms);
+            }
+            free(song->waveform_lengths);
             song->num_waveforms = (u8)(chunk_size / 4);
             song->waveform_lengths = (u32*)calloc(song->num_waveforms, sizeof(u32));
             song->waveforms = (i8**)calloc(song->num_waveforms, sizeof(i8*));
@@ -659,6 +691,11 @@ static bool aon_load(AonSong* song, const u8* data, u32 size) {
 
             for (int i = 0; i < song->num_waveforms; i++) {
                 u32 length = read_be32(chunk + i * 4);
+                // Reject waveform lengths that exceed the total file size
+                if (length > size) {
+                    fprintf(stderr, "AoN: waveform %d length %u exceeds file size\n", i, length);
+                    return false;
+                }
                 song->waveform_lengths[i] = length;
                 if (length > 0) {
                     song->waveforms[i] = (i8*)calloc(length, 1);
@@ -697,6 +734,17 @@ static bool aon_load(AonSong* song, const u8* data, u32 size) {
         return false;
     }
 
+    // Clamp num_positions to position_list size
+    if (song->num_positions > song->position_list_size) {
+        song->num_positions = (u8)song->position_list_size;
+    }
+    if (song->num_positions == 0) {
+        return false;
+    }
+    if (song->restart_position >= song->num_positions) {
+        song->restart_position = 0;
+    }
+
     // Fill metadata
     song->metadata.num_positions = song->num_positions;
     song->metadata.num_patterns = song->num_patterns;
@@ -715,7 +763,8 @@ static void aon_init_playback(AonSong* song, u8 start_position) {
     song->global.tempo = 125;
     song->global.speed = 6;
     song->global.position = start_position;
-    song->global.current_pattern = song->position_list[start_position];
+    u8 pat = song->position_list[start_position];
+    song->global.current_pattern = (pat < song->num_patterns) ? pat : 0;
 
     for (int i = 0; i < song->num_channels; i++) {
         AonVoice* v = &song->voices[i];
@@ -912,6 +961,9 @@ static void start_repeat(AonSong* song, const AonTrackCell* cell, AonVoice* v, A
         v->per_slide = 0;
     }
 
+    if (instr->waveform >= song->num_waveforms) {
+        return;
+    }
     i8* waveform = song->waveforms[instr->waveform];
 
     v->old_wave_len = v->wave_len;
@@ -1009,6 +1061,9 @@ static void init_synth(AonSong* song, const AonTrackCell* cell, AonVoice* v, Aon
                 v->ch_flag = 3;
             }
 
+            if (instr->waveform >= song->num_waveforms) {
+                return;
+            }
             i8* waveform = song->waveforms[instr->waveform];
             bool reset = true;
 
@@ -1198,7 +1253,7 @@ static void get_da_channel(AonSong* song, const AonTrackCell* cell, AonVoice* v)
         }
     }
 
-    v->arpeggio_fine_tune = instr->fine_tune;
+    v->arpeggio_fine_tune = instr->fine_tune & 0x0f;
     note--;
 
     // Tone portamento target
@@ -1281,6 +1336,9 @@ static void play_new_step(AonSong* song) {
 
             g->pat_delay_cnt = -1;
 
+            if (g->current_pattern >= song->num_patterns) {
+                g->current_pattern = 0;
+            }
             AonPattern* pattern = &song->patterns[g->current_pattern];
             for (int i = 0; i < song->num_channels; i++) {
                 get_da_channel(song, &pattern->cells[g->pat_cnt][i], &song->voices[i]);
@@ -1313,7 +1371,8 @@ static void play_new_step(AonSong* song) {
 
         if (g->pattern_break) {
             g->pattern_break = false;
-            g->current_pattern = song->position_list[g->position];
+            u8 pat = song->position_list[g->position];
+            g->current_pattern = (pat < song->num_patterns) ? pat : 0;
             one_more_time = true;
         }
     } while (one_more_time);
@@ -1724,9 +1783,12 @@ static void do_synth(AonSong* song, AonVoice* v) {
 // Handle all effects for all channels
 
 static void play_fx(AonSong* song) {
-    u8 pattern = song->position_list[song->global.position];
-    if (pattern != song->global.current_pattern) {
-        song->global.current_pattern = pattern;
+    u8 pat = song->position_list[song->global.position];
+    if (pat >= song->num_patterns) {
+        pat = 0;
+    }
+    if (pat != song->global.current_pattern) {
+        song->global.current_pattern = pat;
     }
 
     for (int i = 0; i < song->num_channels; i++) {
@@ -1745,14 +1807,7 @@ static void setup_channel(AonSong* song, AonVoice* v, AonMixerChannel* mix) {
 
     if ((v->ch_flag & 0x02) && v->waveform != nullptr) {
         // New waveform trigger
-        u32 wf_total_len = 0;
-        // Find the waveform's total buffer length
-        for (int i = 0; i < song->num_waveforms; i++) {
-            if (song->waveforms[i] == v->waveform) {
-                wf_total_len = song->waveform_lengths[i];
-                break;
-            }
-        }
+        u32 wf_total_len = aon_waveform_buf_size(song, v->waveform);
 
         u32 length = v->wave_len * 2;
         if (v->waveform_offset + length > wf_total_len) {
@@ -1762,15 +1817,18 @@ static void setup_channel(AonSong* song, AonVoice* v, AonMixerChannel* mix) {
         mix->sample_data = v->waveform;
         mix->sample_offset = v->waveform_offset;
         mix->sample_length = length;
+        mix->sample_buf_size = wf_total_len;
         mix->phase = 0.0;
         mix->playing = true;
 
         // Set loop
         if (v->repeat_start != nullptr && v->repeat_length > 1) {
             u32 loop_len = v->repeat_length * 2;
+            u32 loop_buf = aon_waveform_buf_size(song, v->repeat_start);
             mix->loop_data = v->repeat_start;
             mix->loop_offset = v->repeat_offset;
             mix->loop_length = loop_len;
+            mix->loop_buf_size = loop_buf;
             mix->has_loop = true;
         } else {
             mix->has_loop = false;
@@ -1778,9 +1836,11 @@ static void setup_channel(AonSong* song, AonVoice* v, AonMixerChannel* mix) {
     } else if (v->ch_flag == 1) {
         // Update loop/repeat only
         if (v->repeat_start != nullptr && v->repeat_length > 1) {
+            u32 loop_buf = aon_waveform_buf_size(song, v->repeat_start);
             mix->loop_data = v->repeat_start;
             mix->loop_offset = v->repeat_offset;
             mix->loop_length = v->repeat_length * 2;
+            mix->loop_buf_size = loop_buf;
             mix->has_loop = true;
         }
     }
@@ -1790,13 +1850,16 @@ static void setup_channel(AonSong* song, AonVoice* v, AonMixerChannel* mix) {
     // it always loops. The C# code handles this via SetSample()+SetLoop() in
     // its else branch, which replaces the sample buffer with repeat data.
     if (!mix->playing && v->repeat_start != nullptr && v->repeat_length > 1) {
+        u32 rep_buf = aon_waveform_buf_size(song, v->repeat_start);
         mix->loop_data = v->repeat_start;
         mix->loop_offset = v->repeat_offset;
         mix->loop_length = v->repeat_length * 2;
+        mix->loop_buf_size = rep_buf;
         mix->has_loop = true;
         mix->sample_data = v->repeat_start;
         mix->sample_offset = v->repeat_offset;
         mix->sample_length = v->repeat_length * 2;
+        mix->sample_buf_size = rep_buf;
         mix->phase = 0.0;
         mix->playing = true;
     }
@@ -1911,15 +1974,30 @@ static void mix_one_frame(AonSong* song, f32* left, f32* right) {
                     loop_pos = loop_pos % mix->loop_length;
                 }
                 u32 byte_pos = mix->loop_offset + loop_pos;
-                sample = mix->loop_data[byte_pos] / 128.0f;
+                if (byte_pos < mix->loop_buf_size) {
+                    sample = mix->loop_data[byte_pos] / 128.0f;
+                } else {
+                    mix->playing = false;
+                    continue;
+                }
             } else {
                 u32 byte_pos = mix->sample_offset + pos;
-                sample = mix->sample_data[byte_pos] / 128.0f;
+                if (byte_pos < mix->sample_buf_size) {
+                    sample = mix->sample_data[byte_pos] / 128.0f;
+                } else {
+                    mix->playing = false;
+                    continue;
+                }
             }
         } else {
             if (pos < mix->sample_length) {
                 u32 byte_pos = mix->sample_offset + pos;
-                sample = mix->sample_data[byte_pos] / 128.0f;
+                if (byte_pos < mix->sample_buf_size) {
+                    sample = mix->sample_data[byte_pos] / 128.0f;
+                } else {
+                    mix->playing = false;
+                    continue;
+                }
             } else {
                 mix->playing = false;
                 continue;
