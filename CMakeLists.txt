@@ -61,6 +61,7 @@ endif()
 # Sanitizer support
 option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(ENABLE_TSAN "Enable ThreadSanitizer" OFF)
+option(ENABLE_FUZZ "Build fuzz targets (requires Clang)" OFF)
 
 if(ENABLE_ASAN)
     set(ASAN_FLAGS -fsanitize=address -fno-omit-frame-pointer)
@@ -133,3 +134,8 @@ add_subdirectory(uade)
 add_subdirectory(v2m)
 add_subdirectory(xsf)
 add_subdirectory(zxtune)
+
+# Fuzz targets (only when explicitly enabled)
+if(ENABLE_FUZZ)
+    add_subdirectory(fuzz)
+endif()
