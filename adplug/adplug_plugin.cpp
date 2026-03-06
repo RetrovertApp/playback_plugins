@@ -127,6 +127,57 @@ static bool extension_matches(const char* ext, const char* const* list) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// FAC SoundTracker (.MUS) detector
+//
+// FAC .MUS does not use a front-file magic. RoboPlay's player expects a fixed-size
+// header at offset 0x3F00 with key fields like version/device/speed. We use those
+// fields as a lightweight signature so FAC files can be prioritized over SID .MUS.
+
+static bool is_fac_mus_file(const uint8_t* data, uint64_t data_size) {
+    if (data == nullptr) {
+        return false;
+    }
+
+    // FAC header is expected at 0x3F00 and is 256 bytes in the original format.
+    static const uint64_t FAC_HEADER_OFFSET = 0x3F00;
+    static const uint64_t FAC_HEADER_SIZE = 256;
+    if (data_size < FAC_HEADER_OFFSET + FAC_HEADER_SIZE) {
+        return false;
+    }
+
+    // Offsets within FAC header (from RoboPlay's MUS_HEADER layout).
+    static const uint64_t OFF_SPEED_LO = FAC_HEADER_OFFSET + 130;
+    static const uint64_t OFF_SPEED_HI = FAC_HEADER_OFFSET + 131;
+    static const uint64_t OFF_VERSION = FAC_HEADER_OFFSET + 140;
+    static const uint64_t OFF_DEVICE_ID = FAC_HEADER_OFFSET + 247;
+    static const uint64_t OFF_TRACKS = FAC_HEADER_OFFSET + 248;
+
+    uint8_t version = data[OFF_VERSION];
+    if (version < 1 || version > 3) {
+        return false;
+    }
+
+    uint8_t device_id = data[OFF_DEVICE_ID];
+    if (device_id > 1) {
+        return false;
+    }
+
+    // Valid FAC tempo range used by RoboPlay.
+    uint16_t speed = (uint16_t)data[OFF_SPEED_LO] | ((uint16_t)data[OFF_SPEED_HI] << 8);
+    if (speed == 0 || speed > 0x72) {
+        return false;
+    }
+
+    // Track count should be sane and non-zero.
+    uint8_t tracks = data[OFF_TRACKS];
+    if (tracks == 0 || tracks > 127) {
+        return false;
+    }
+
+    return true;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // RVPlaybackPlugin implementation
 
 static const char* adplug_supported_extensions(void) {
@@ -202,11 +253,20 @@ static RVProbeResult adplug_probe_can_play(uint8_t* data, uint64_t data_size, co
             return RVProbeResult_Unsure;
         }
 
+        // .mus is ambiguous across ecosystems (e.g. C64 SID MUS vs FAC SoundTracker MUS).
+        // If this looks like FAC, claim it strongly so sidplayfp doesn't get selected.
+        if (strcasecmp_local(ext, "mus") == 0) {
+            if (is_fac_mus_file(data, data_size)) {
+                return RVProbeResult_Supported;
+            }
+            return RVProbeResult_Unsure;
+        }
+
         // Other AdPlug extensions without reliable magic bytes
         static const char* const other_exts[]
             = { "adl", "adt", "adtrack", "agd", "amd", "bam", "cff", "dfm", "dmo", "dtm", "got",  "herad",
                 "hsc", "hsp", "hybrid",  "hyp", "imf", "jbm", "ksm", "laa", "lds", "m",   "mad",  "mdi",
-                "mkj", "msc", "mtk",     "mtr", "mus", "pis", "plx", "psi", "rat", "raw", "rix",  "rol",
+                "mkj", "msc", "mtk",     "mtr", "pis", "plx", "psi", "rat", "raw", "rix",  "rol",
                 "s3m", "sa2", "sat",     "sci", "sng", "u6m", "vgm", "xad", "xms", "xsm", nullptr };
         if (extension_matches(ext, other_exts)) {
             return RVProbeResult_Unsure;
