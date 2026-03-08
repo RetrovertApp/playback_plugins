@@ -254,6 +254,19 @@ static RVProbeResult uade_plugin_probe_can_play(uint8_t* file_data, uint64_t dat
         return RVProbeResult_Unsupported;
     }
 
+    // Check if this is an ambiguous extension shared with other ecosystems
+    bool ambiguous_ext = false;
+    if (filename) {
+        const char* dot = strrchr(filename, '.');
+        if (dot) {
+            // .mus is shared between sidplayfp (C64 SID MUS), adplug (FAC SoundTracker), and UADE
+            // .str is shared between sidplayfp and UADE
+            if (strcasecmp(dot, ".mus") == 0 || strcasecmp(dot, ".str") == 0) {
+                ambiguous_ext = true;
+            }
+        }
+    }
+
     // Create a temporary state without spawning threads for probing
     ThreadWrapper temp_wrapper;
     struct uade_state* state = create_uade_state(0, &temp_wrapper);
@@ -268,11 +281,11 @@ static RVProbeResult uade_plugin_probe_can_play(uint8_t* file_data, uint64_t dat
         const char* player_name
             = (detect_info.ep && detect_info.ep->playername) ? detect_info.ep->playername : "unknown";
 
-        // For formats with dedicated plugins, return Unsure so they get priority.
-        // UADE will be used as fallback if the dedicated plugin fails or is unavailable.
-        if (has_dedicated_plugin(player_name)) {
+        // For formats with dedicated plugins or ambiguous extensions, return Unsure
+        // so specialized plugins get priority. UADE acts as fallback.
+        if (has_dedicated_plugin(player_name) || ambiguous_ext) {
             result = RVProbeResult_Unsure;
-            rv_debug("UADE: Format has dedicated plugin, deferring: %s (player: %s)", filename, player_name);
+            rv_debug("UADE: Deferring for: %s (player: %s)", filename, player_name);
         } else {
             result = RVProbeResult_Supported;
             rv_debug("UADE: Supported format detected: %s (player: %s)", filename, player_name);
