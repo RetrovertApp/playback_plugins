@@ -115,36 +115,18 @@ static int v2m_destroy(void* user_data) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static RVProbeResult v2m_probe_can_play(uint8_t* probe_data, uint64_t data_size, const char* url, uint64_t total_size) {
+    (void)probe_data;
+    (void)data_size;
     (void)total_size;
 
-    // Try to check V2M version using the library's own check.
-    // CheckV2MVersion/readfile has no internal bounds checking - it reads through
-    // 16 channels using offsets from the data without bounds checks, so non-V2M
-    // data can cause out-of-bounds reads and crashes. We must pre-validate the
-    // header before calling it.
-    if (data_size >= 64 && data_size >= total_size) {
-        // V2M header: [timediv:u32] [maxtime:u32] [gdnum:u32] [global_data:10*gdnum bytes] ...
-        // Sanity check the header fields before passing to CheckV2MVersion
-        uint32_t timediv = *((uint32_t*)(probe_data));
-        uint32_t gdnum = *((uint32_t*)(probe_data + 8));
-
-        // timediv is typically 100-500, reject obviously wrong values
-        // gdnum * 10 + 12 must fit within the data
-        if (timediv > 0 && timediv < 100000 && (uint64_t)12 + (uint64_t)gdnum * 10 < data_size) {
-            ssbase base;
-            memset(&base, 0, sizeof(base));
-            int version = CheckV2MVersion(probe_data, (int)data_size, base);
-            if (version >= 0) {
-                return RVProbeResult_Supported;
-            }
-        }
-    }
-
-    // Fall back to extension check
+    // Extension-only detection. CheckV2MVersion has no internal bounds checking --
+    // it walks 16 channels using offsets parsed from the data without validation,
+    // so calling it on non-V2M probe data causes out-of-bounds reads and crashes.
+    // V2M is a niche demoscene format; no other format uses the .v2m extension.
     if (url != nullptr) {
         const char* dot = strrchr(url, '.');
         if (dot != nullptr && strcasecmp(dot, ".v2m") == 0) {
-            return RVProbeResult_Unsure;
+            return RVProbeResult_Supported;
         }
     }
 
