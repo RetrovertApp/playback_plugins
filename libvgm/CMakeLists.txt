@@ -36,7 +36,15 @@ if(TARGET base)
         target_link_libraries(vgm_pattern PRIVATE m)
     endif()
 
-    target_link_libraries(vgm_pattern PRIVATE base)
+    # Only use base's headers -- the arena symbols are resolved at runtime
+    # from the host process. Linking the shared libbase.so into the plugin
+    # causes "cannot allocate memory in static TLS block" on dlopen.
+    target_include_directories(vgm_pattern PRIVATE
+        $<TARGET_PROPERTY:base,INTERFACE_INCLUDE_DIRECTORIES>
+    )
+    target_compile_definitions(vgm_pattern PRIVATE
+        $<TARGET_PROPERTY:base,INTERFACE_COMPILE_DEFINITIONS>
+    )
 endif()
 
 # Find zlib for VGZ decompression
