@@ -131,10 +131,13 @@ void xsf_usf_destroy(void* state_ptr) {
 int xsf_usf_info(void* state_ptr, const char* name, const char* value) {
     XsfUsfState* state = (XsfUsfState*)state_ptr;
 
-    if (strcasecmp(name, "_enablecompare") == 0) {
-        state->enable_compare = atoi(value);
-    } else if (strcasecmp(name, "_enablefifofull") == 0) {
-        state->enable_fifo_full = atoi(value);
+    // Match lazyusf2's reference implementation: any non-empty value enables the flag.
+    // USF files use varied truthy strings ("true", "yes", "on", "enabled", etc.)
+    // so atoi() would incorrectly return 0 for most of them.
+    if (strcasecmp(name, "_enablecompare") == 0 && value[0] != '\0') {
+        state->enable_compare = 1;
+    } else if (strcasecmp(name, "_enablefifofull") == 0 && value[0] != '\0') {
+        state->enable_fifo_full = 1;
     }
 
     return 0;
