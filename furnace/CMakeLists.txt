@@ -29,6 +29,7 @@ download_library(
         patches/log-cpp.patch
         patches/adpcm-xq-c.patch
         patches/ymf278-missing-includes.patch
+        patches/remove-abort-calls.patch
 )
 
 # =====================================================================================
@@ -186,6 +187,7 @@ target_include_directories(furnace_static PRIVATE
 
 target_compile_definitions(furnace_static PRIVATE
     DIV_NO_SNDFILE
+    NDEBUG
 )
 
 target_link_libraries(furnace_static PRIVATE ZLIB::ZLIB)

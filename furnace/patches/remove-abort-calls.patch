@@ -1,0 +1,31 @@
+--- a/src/engine/workPool.cpp
++++ b/src/engine/workPool.cpp
+@@ -159,7 +159,7 @@
+         workThreads[i].lock.unlock();
+       } catch (std::exception& e) {
+         logE("ERROR IN THREAD SYNC! %s",e.what());
+-        abort();
++        return;
+       }
+     }
+   }
+--- a/src/engine/platform/abstract.cpp
++++ b/src/engine/platform/abstract.cpp
+@@ -165,7 +165,7 @@
+ 
+ void DivDispatch::notifyInsDeletion(void* ins) {
+   logE("notifyInsDeletion NOT implemented!");
+-  abort();
++  return;
+ }
+ 
+ void DivDispatch::notifyPlaybackStop() {
+--- a/src/engine/configEngine.cpp
++++ b/src/engine/configEngine.cpp
+@@ -194,5 +194,5 @@
+     deleteFile(path.c_str());
+   }
+ 
+-  exit(0);
++  return;
+ }
