@@ -32,6 +32,10 @@ if(COMMAND apply_target_config)
     apply_target_config(vgm_pattern)
 endif()
 
+if(COMMAND suppress_external_warnings)
+    suppress_external_warnings(vgm_pattern)
+endif()
+
 if(UNIX)
     target_link_libraries(vgm_pattern PRIVATE m)
 endif()

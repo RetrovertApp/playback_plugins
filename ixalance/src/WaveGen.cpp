@@ -145,11 +145,11 @@ namespace IXS {
 
   void __thiscall IXS__WAVEGEN__FUN_0040c380(WaveGen *obj, Local72 *loc72);
 
-#if !defined(EMSCRIPTEN) && !defined(LINUX)
+#ifndef M_PI
   const double M_PI = 3.14159265358979323846;
+#endif
+#ifndef M_1_PI
   const double M_1_PI = 0.318309886183790671538;
-#else
-  // defined in EMSCRIPTEN's math.h
 #endif
   const double PI2 = M_PI * 2.0;
 
