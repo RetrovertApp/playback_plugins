@@ -33,7 +33,7 @@ typedef int64_t i64;
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Forward declarations
 
-typedef struct RpArena RpArena;
+typedef struct VgmAllocator VgmAllocator;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Constants
@@ -193,8 +193,8 @@ typedef struct VgmIterator {
 // API
 
 // Parse VGM file from buffer
-// Returns VgmFile allocated from arena, or nullptr on error
-VgmParseResult vgm_parse(RpArena* arena, const u8* buffer, u64 size);
+// Returns VgmFile allocated from allocator, or nullptr on error
+VgmParseResult vgm_parse(VgmAllocator* alloc, const u8* buffer, u64 size);
 
 // Get human-readable error message for parse status
 const char* vgm_parse_status_string(VgmParseStatus status);
@@ -227,16 +227,16 @@ static inline bool vgm_has_loop(const VgmFile* file) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Arena wrappers for use from C++ plugins (hides base/arena.h dependencies)
+// Allocator wrappers for use from C++ plugins
 
-// Create arena for VGM pattern extraction
+// Create allocator for VGM pattern extraction
 // Returns nullptr on failure
-RpArena* vgm_arena_create(u64 capacity);
+VgmAllocator* vgm_alloc_create(void);
 
-// Destroy arena
-void vgm_arena_destroy(RpArena* arena);
+// Destroy allocator and free all tracked allocations
+void vgm_alloc_destroy(VgmAllocator* alloc);
 
-// Reset arena (reuse memory for new file)
-void vgm_arena_rewind(RpArena* arena);
+// Free all tracked allocations but keep the allocator alive
+void vgm_alloc_rewind(VgmAllocator* alloc);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

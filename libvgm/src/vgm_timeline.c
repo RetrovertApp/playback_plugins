@@ -3,7 +3,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "vgm_timeline.h"
-#include "base/arena.h"
+#include "vgm_alloc.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -49,7 +49,7 @@ static u32 add_chip_channels(VgmTimeline* timeline, VgmChipId chip_id, u8 chip_i
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Helper to grow event buffer if needed
 
-static bool ensure_event_capacity(RpArena* arena, VgmTimeline* timeline, u32 additional) {
+static bool ensure_event_capacity(VgmAllocator* alloc, VgmTimeline* timeline, u32 additional) {
     u32 needed = timeline->event_count + additional;
     if (needed <= timeline->event_capacity) {
         return true;
@@ -64,13 +64,16 @@ static bool ensure_event_capacity(RpArena* arena, VgmTimeline* timeline, u32 add
         new_capacity = 1024;
     }
 
-    VgmNoteEvent* new_events = arena_alloc_array(arena, VgmNoteEvent, new_capacity);
+    VgmNoteEvent* new_events = (VgmNoteEvent*)vgm_realloc(alloc, timeline->events,
+                                                            new_capacity * sizeof(VgmNoteEvent));
     if (new_events == nullptr) {
         return false;
     }
 
-    if (timeline->events != nullptr && timeline->event_count > 0) {
-        memcpy(new_events, timeline->events, timeline->event_count * sizeof(VgmNoteEvent));
+    // Zero newly allocated portion
+    if (timeline->event_count < new_capacity) {
+        memset(&new_events[timeline->event_count], 0,
+               (new_capacity - timeline->event_count) * sizeof(VgmNoteEvent));
     }
 
     timeline->events = new_events;
@@ -81,12 +84,12 @@ static bool ensure_event_capacity(RpArena* arena, VgmTimeline* timeline, u32 add
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Helper to copy events from buffer to timeline
 
-static bool copy_events_to_timeline(RpArena* arena, VgmTimeline* timeline, const VgmEventBuffer* buffer) {
+static bool copy_events_to_timeline(VgmAllocator* alloc, VgmTimeline* timeline, const VgmEventBuffer* buffer) {
     if (buffer->count == 0) {
         return true;
     }
 
-    if (!ensure_event_capacity(arena, timeline, buffer->count)) {
+    if (!ensure_event_capacity(alloc, timeline, buffer->count)) {
         return false;
     }
 
@@ -123,7 +126,7 @@ static int compare_events(const void* a, const void* b) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Main timeline creation
 
-VgmTimelineResult vgm_timeline_create(RpArena* arena, const VgmFile* file) {
+VgmTimelineResult vgm_timeline_create(VgmAllocator* alloc, const VgmFile* file) {
     VgmTimelineResult result = { 0 };
 
     if (file == nullptr) {
@@ -132,7 +135,7 @@ VgmTimelineResult vgm_timeline_create(RpArena* arena, const VgmFile* file) {
     }
 
     // Allocate timeline
-    VgmTimeline* timeline = arena_alloc_zero(arena, VgmTimeline);
+    VgmTimeline* timeline = (VgmTimeline*)vgm_alloc(alloc, sizeof(VgmTimeline));
     if (timeline == nullptr) {
         result.status = VGM_TIMELINE_ERROR_ALLOCATION_FAILED;
         return result;
@@ -148,7 +151,7 @@ VgmTimelineResult vgm_timeline_create(RpArena* arena, const VgmFile* file) {
 
     // Check for YM2612
     if (file->chips[VGM_CHIP_YM2612].present) {
-        ym2612_handler = vgm_chip_ym2612_create(arena, file->chips[VGM_CHIP_YM2612].clock, 0);
+        ym2612_handler = vgm_chip_ym2612_create(alloc, file->chips[VGM_CHIP_YM2612].clock, 0);
         if (ym2612_handler != nullptr) {
             add_chip_channels(timeline, VGM_CHIP_YM2612, 0, ym2612_handler->channel_count);
         }
@@ -156,7 +159,7 @@ VgmTimelineResult vgm_timeline_create(RpArena* arena, const VgmFile* file) {
 
     // Check for SN76489
     if (file->chips[VGM_CHIP_SN76489].present) {
-        sn76489_handler = vgm_chip_sn76489_create(arena, file->chips[VGM_CHIP_SN76489].clock, 0);
+        sn76489_handler = vgm_chip_sn76489_create(alloc, file->chips[VGM_CHIP_SN76489].clock, 0);
         if (sn76489_handler != nullptr) {
             add_chip_channels(timeline, VGM_CHIP_SN76489, 0, sn76489_handler->channel_count);
         }
@@ -164,7 +167,7 @@ VgmTimelineResult vgm_timeline_create(RpArena* arena, const VgmFile* file) {
 
     // Check for AY8910/YM2149
     if (file->chips[VGM_CHIP_AY8910].present) {
-        ay8910_handler = vgm_chip_ay8910_create(arena, file->chips[VGM_CHIP_AY8910].clock, 0);
+        ay8910_handler = vgm_chip_ay8910_create(alloc, file->chips[VGM_CHIP_AY8910].clock, 0);
         if (ay8910_handler != nullptr) {
             add_chip_channels(timeline, VGM_CHIP_AY8910, 0, ay8910_handler->channel_count);
         }
@@ -191,7 +194,7 @@ VgmTimelineResult vgm_timeline_create(RpArena* arena, const VgmFile* file) {
 #endif
 
     // Create event buffer for collecting events during iteration
-    VgmEventBuffer event_buffer = vgm_event_buffer_create(arena, 256);
+    VgmEventBuffer event_buffer = vgm_event_buffer_create(alloc, 256);
     if (event_buffer.events == nullptr) {
         result.status = VGM_TIMELINE_ERROR_ALLOCATION_FAILED;
         return result;
@@ -275,7 +278,7 @@ VgmTimelineResult vgm_timeline_create(RpArena* arena, const VgmFile* file) {
                 }
             }
 #endif
-            if (!copy_events_to_timeline(arena, timeline, &event_buffer)) {
+            if (!copy_events_to_timeline(alloc, timeline, &event_buffer)) {
                 result.status = VGM_TIMELINE_ERROR_ALLOCATION_FAILED;
                 return result;
             }

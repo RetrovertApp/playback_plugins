@@ -3,7 +3,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "vgm_chips.h"
-#include "base/arena.h"
+#include "vgm_alloc.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -20,10 +20,10 @@ static char s_note_buffer[8]; // Static buffer for note name formatting
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Event buffer implementation
 
-VgmEventBuffer vgm_event_buffer_create(RpArena* arena, u32 capacity) {
+VgmEventBuffer vgm_event_buffer_create(VgmAllocator* alloc, u32 capacity) {
     VgmEventBuffer buffer = { 0 };
     if (capacity > 0) {
-        buffer.events = arena_alloc_array(arena, VgmNoteEvent, capacity);
+        buffer.events = (VgmNoteEvent*)vgm_alloc_array(alloc, capacity * sizeof(VgmNoteEvent));
         buffer.capacity = capacity;
     }
     return buffer;
@@ -407,9 +407,9 @@ static void ym2612_reset(VgmChipHandler* handler) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-VgmChipHandler* vgm_chip_ym2612_create(RpArena* arena, u32 clock, u8 chip_instance) {
-    VgmChipHandler* handler = arena_alloc_zero(arena, VgmChipHandler);
-    Ym2612State* state = arena_alloc_zero(arena, Ym2612State);
+VgmChipHandler* vgm_chip_ym2612_create(VgmAllocator* alloc, u32 clock, u8 chip_instance) {
+    VgmChipHandler* handler = (VgmChipHandler*)vgm_alloc(alloc, sizeof(VgmChipHandler));
+    Ym2612State* state = (Ym2612State*)vgm_alloc(alloc, sizeof(Ym2612State));
 
     state->clock = clock;
 
@@ -672,9 +672,9 @@ static void sn76489_reset(VgmChipHandler* handler) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-VgmChipHandler* vgm_chip_sn76489_create(RpArena* arena, u32 clock, u8 chip_instance) {
-    VgmChipHandler* handler = arena_alloc_zero(arena, VgmChipHandler);
-    Sn76489State* state = arena_alloc_zero(arena, Sn76489State);
+VgmChipHandler* vgm_chip_sn76489_create(VgmAllocator* alloc, u32 clock, u8 chip_instance) {
+    VgmChipHandler* handler = (VgmChipHandler*)vgm_alloc(alloc, sizeof(VgmChipHandler));
+    Sn76489State* state = (Sn76489State*)vgm_alloc(alloc, sizeof(Sn76489State));
 
     state->clock = clock;
     // Initialize volumes to silent
@@ -990,9 +990,9 @@ static void ay8910_reset(VgmChipHandler* handler) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-VgmChipHandler* vgm_chip_ay8910_create(RpArena* arena, u32 clock, u8 chip_instance) {
-    VgmChipHandler* handler = arena_alloc_zero(arena, VgmChipHandler);
-    Ay8910State* state = arena_alloc_zero(arena, Ay8910State);
+VgmChipHandler* vgm_chip_ay8910_create(VgmAllocator* alloc, u32 clock, u8 chip_instance) {
+    VgmChipHandler* handler = (VgmChipHandler*)vgm_alloc(alloc, sizeof(VgmChipHandler));
+    Ay8910State* state = (Ay8910State*)vgm_alloc(alloc, sizeof(Ay8910State));
 
     state->clock = clock;
     // Default: tone enabled, noise disabled, volume silent (15 = off)

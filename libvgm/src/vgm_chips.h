@@ -73,7 +73,7 @@ struct VgmChipHandler {
 // Event buffer management
 
 // Initialize event buffer with given capacity (allocates from arena)
-VgmEventBuffer vgm_event_buffer_create(RpArena* arena, u32 capacity);
+VgmEventBuffer vgm_event_buffer_create(VgmAllocator* alloc, u32 capacity);
 
 // Add event to buffer (returns false if full)
 bool vgm_event_buffer_push(VgmEventBuffer* buffer, const VgmNoteEvent* event);
@@ -86,15 +86,15 @@ void vgm_event_buffer_clear(VgmEventBuffer* buffer);
 
 // Create YM2612 handler (6-channel FM synthesis)
 // clock: Chip clock rate in Hz (typically 7670453 for NTSC Genesis)
-VgmChipHandler* vgm_chip_ym2612_create(RpArena* arena, u32 clock, u8 chip_instance);
+VgmChipHandler* vgm_chip_ym2612_create(VgmAllocator* alloc, u32 clock, u8 chip_instance);
 
 // Create SN76489 handler (4-channel PSG: 3 tone + 1 noise)
 // clock: Chip clock rate in Hz (typically 3579545)
-VgmChipHandler* vgm_chip_sn76489_create(RpArena* arena, u32 clock, u8 chip_instance);
+VgmChipHandler* vgm_chip_sn76489_create(VgmAllocator* alloc, u32 clock, u8 chip_instance);
 
 // Create AY8910/YM2149 handler (3-channel PSG + noise)
 // clock: Chip clock rate in Hz (typically 1789773 or 2000000)
-VgmChipHandler* vgm_chip_ay8910_create(RpArena* arena, u32 clock, u8 chip_instance);
+VgmChipHandler* vgm_chip_ay8910_create(VgmAllocator* alloc, u32 clock, u8 chip_instance);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Frequency to note conversion utilities

@@ -99,7 +99,7 @@ typedef struct VgmQuantizeResult {
 
 // Create a quantized pattern from a timeline with per-channel adaptive timing
 // Each channel gets its own samples_per_row based on event density
-VgmQuantizeResult vgm_quantize(RpArena* arena, const VgmTimeline* timeline, VgmQuantizeConfig config);
+VgmQuantizeResult vgm_quantize(VgmAllocator* alloc, const VgmTimeline* timeline, VgmQuantizeConfig config);
 
 // Get human-readable error message
 const char* vgm_quantize_status_string(VgmQuantizeStatus status);

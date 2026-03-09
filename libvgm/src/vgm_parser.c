@@ -3,7 +3,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "vgm_parser.h"
-#include "base/arena.h"
+#include "vgm_alloc.h"
 #include <string.h>
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -154,7 +154,7 @@ static void set_chip_info(VgmChipInfo* info, u32 clock) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Parse VGM file
 
-VgmParseResult vgm_parse(RpArena* arena, const u8* buffer, u64 size) {
+VgmParseResult vgm_parse(VgmAllocator* alloc, const u8* buffer, u64 size) {
     VgmParseResult result = { 0 };
 
     // Validate input
@@ -179,7 +179,7 @@ VgmParseResult vgm_parse(RpArena* arena, const u8* buffer, u64 size) {
     u32 version = read_u32_le(buffer + 0x08);
 
     // Allocate VgmFile
-    VgmFile* file = arena_alloc_zero(arena, VgmFile);
+    VgmFile* file = (VgmFile*)vgm_alloc(alloc, sizeof(VgmFile));
     if (file == nullptr) {
         result.status = VGM_PARSE_ERROR_ALLOCATION_FAILED;
         return result;
@@ -786,34 +786,6 @@ void vgm_iterator_seek(VgmIterator* iter, const VgmFile* file, u32 target_sample
         if (!vgm_iterator_next(iter, &cmd)) {
             break;
         }
-    }
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Arena wrappers for use from C++ plugins
-
-RpArena* vgm_arena_create(u64 capacity) {
-    ArenaSettings settings = {
-        .reserved_size = capacity,
-        .allocation_site_file = __FILE__,
-        .allocation_site_line = __LINE__,
-    };
-    return arena_new_(&settings);
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-void vgm_arena_destroy(RpArena* arena) {
-    if (arena != nullptr) {
-        arena_destroy(arena);
-    }
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-void vgm_arena_rewind(RpArena* arena) {
-    if (arena != nullptr) {
-        arena_rewind(arena);
     }
 }
 

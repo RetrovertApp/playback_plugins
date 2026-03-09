@@ -63,7 +63,7 @@ typedef struct VgmTimelineResult {
 
 // Extract all note events from a parsed VGM file
 // Creates chip handlers for present chips, iterates commands, collects events
-VgmTimelineResult vgm_timeline_create(RpArena* arena, const VgmFile* file);
+VgmTimelineResult vgm_timeline_create(VgmAllocator* alloc, const VgmFile* file);
 
 // Get human-readable error message
 const char* vgm_timeline_status_string(VgmTimelineStatus status);

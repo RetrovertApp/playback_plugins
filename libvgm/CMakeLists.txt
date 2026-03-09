@@ -11,40 +11,29 @@ enable_language(CXX)
 
 set(output_dir "${RETROVERT_PLUGIN_OUTPUT_DIR}")
 
-# VGM Pattern Extraction library (pure C, depends on host's base library)
-# Only built when included from a host project that provides the 'base' target
-if(TARGET base)
-    set(VGM_PATTERN_SOURCES
-        src/vgm_parser.c
-        src/vgm_chips.c
-        src/vgm_timeline.c
-        src/vgm_quantize.c
-    )
+# VGM Pattern Extraction library (pure C, no external dependencies)
+set(VGM_PATTERN_SOURCES
+    src/vgm_alloc.c
+    src/vgm_parser.c
+    src/vgm_chips.c
+    src/vgm_timeline.c
+    src/vgm_quantize.c
+)
 
-    add_library(vgm_pattern STATIC ${VGM_PATTERN_SOURCES})
+add_library(vgm_pattern STATIC ${VGM_PATTERN_SOURCES})
 
-    set_target_properties(vgm_pattern PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_target_properties(vgm_pattern PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-    target_include_directories(vgm_pattern PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${CMAKE_SOURCE_DIR}/src
-    )
+target_include_directories(vgm_pattern PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
 
+if(COMMAND apply_target_config)
     apply_target_config(vgm_pattern)
+endif()
 
-    if(UNIX)
-        target_link_libraries(vgm_pattern PRIVATE m)
-    endif()
-
-    # Only use base's headers -- the arena symbols are resolved at runtime
-    # from the host process. Linking the shared libbase.so into the plugin
-    # causes "cannot allocate memory in static TLS block" on dlopen.
-    target_include_directories(vgm_pattern PRIVATE
-        $<TARGET_PROPERTY:base,INTERFACE_INCLUDE_DIRECTORIES>
-    )
-    target_compile_definitions(vgm_pattern PRIVATE
-        $<TARGET_PROPERTY:base,INTERFACE_COMPILE_DEFINITIONS>
-    )
+if(UNIX)
+    target_link_libraries(vgm_pattern PRIVATE m)
 endif()
 
 # Find zlib for VGZ decompression
@@ -224,10 +213,8 @@ target_link_libraries(libvgm_playback PRIVATE
     ZLIB::ZLIB
 )
 
-if(TARGET vgm_pattern)
-    target_link_libraries(libvgm_playback PRIVATE vgm_pattern)
-    target_compile_definitions(libvgm_playback PRIVATE HAS_VGM_PATTERN)
-endif()
+target_link_libraries(libvgm_playback PRIVATE vgm_pattern)
+target_compile_definitions(libvgm_playback PRIVATE HAS_VGM_PATTERN)
 
 if(NOT WIN32)
     target_link_libraries(libvgm_playback PRIVATE pthread m)

@@ -26,9 +26,10 @@
 #include "utils/DataLoader.h"
 #include "utils/MemoryLoader.h"
 
-// VGM pattern extraction (pure C) - only available when built with host's arena library
+// VGM pattern extraction (pure C)
 #ifdef HAS_VGM_PATTERN
 extern "C" {
+#include "src/vgm_alloc.h"
 #include "src/vgm_parser.h"
 #include "src/vgm_quantize.h"
 #include "src/vgm_timeline.h"
@@ -72,7 +73,7 @@ struct LibvgmData {
 
 #ifdef HAS_VGM_PATTERN
     // VGM pattern extraction
-    RpArena* pattern_arena;
+    VgmAllocator* pattern_alloc;
     VgmPattern* pattern;
     uint32_t current_sample; // Tracks current playback position in samples
 #endif
@@ -213,8 +214,8 @@ static void* libvgm_create(const RVService* service_api) {
     data->player->SetEndSilenceSamples(SAMPLE_RATE / 2); // 0.5 second silence at end
 
 #ifdef HAS_VGM_PATTERN
-    // Create arena for pattern extraction (1MB should be plenty)
-    data->pattern_arena = vgm_arena_create(16 * 1024 * 1024);
+    // Create allocator for pattern extraction
+    data->pattern_alloc = vgm_alloc_create();
 #endif
 
     return data;
@@ -250,9 +251,9 @@ static int libvgm_destroy(void* user_data) {
     }
 
 #ifdef HAS_VGM_PATTERN
-    // Clean up pattern extraction arena
-    vgm_arena_destroy(data->pattern_arena);
-    data->pattern_arena = nullptr;
+    // Clean up pattern extraction allocator
+    vgm_alloc_destroy(data->pattern_alloc);
+    data->pattern_alloc = nullptr;
 #endif
 
     free(data);
@@ -328,9 +329,9 @@ static int libvgm_open(void* user_data, const char* url, uint32_t subsong, const
     // Extract VGM pattern data for visualization (VGM/VGZ files only)
     data->pattern = nullptr;
     data->current_sample = 0;
-    if (data->pattern_arena != nullptr) {
-        // Reset arena for new file
-        vgm_arena_rewind(data->pattern_arena);
+    if (data->pattern_alloc != nullptr) {
+        // Reset allocator for new file
+        vgm_alloc_rewind(data->pattern_alloc);
 
         // Get the decompressed VGM data from DataLoader
         // (handles both .vgm and .vgz files - libvgm decompresses gzip automatically)
@@ -340,12 +341,12 @@ static int libvgm_open(void* user_data, const char* url, uint32_t subsong, const
         // Check if this is a VGM file (magic "Vgm ")
         if (vgm_size >= 4 && vgm_data[0] == 'V' && vgm_data[1] == 'g' && vgm_data[2] == 'm' && vgm_data[3] == ' ') {
             // Parse VGM file
-            VgmParseResult parse_result = vgm_parse(data->pattern_arena, vgm_data, vgm_size);
+            VgmParseResult parse_result = vgm_parse(data->pattern_alloc, vgm_data, vgm_size);
             if (parse_result.status == VGM_PARSE_OK && parse_result.file != nullptr) {
                 rv_debug("libvgm: Parsed VGM, total_samples=%u", parse_result.file->total_samples);
 
                 // Extract note events into timeline
-                VgmTimelineResult timeline_result = vgm_timeline_create(data->pattern_arena, parse_result.file);
+                VgmTimelineResult timeline_result = vgm_timeline_create(data->pattern_alloc, parse_result.file);
                 if (timeline_result.status == VGM_TIMELINE_OK && timeline_result.timeline != nullptr) {
                     rv_debug("libvgm: Created timeline, events=%u, channels=%u", timeline_result.timeline->event_count,
                              timeline_result.timeline->channel_count);
@@ -358,7 +359,7 @@ static int libvgm_open(void* user_data, const char* url, uint32_t subsong, const
                         .target_rows_visible = VGM_QUANTIZE_DEFAULT_VISIBLE,
                     };
                     VgmQuantizeResult quantize_result
-                        = vgm_quantize(data->pattern_arena, timeline_result.timeline, quantize_config);
+                        = vgm_quantize(data->pattern_alloc, timeline_result.timeline, quantize_config);
                     if (quantize_result.status == VGM_QUANTIZE_OK && quantize_result.pattern != nullptr) {
                         data->pattern = quantize_result.pattern;
                         rv_info("libvgm: Created per-channel pattern with %u channels", data->pattern->channel_count);

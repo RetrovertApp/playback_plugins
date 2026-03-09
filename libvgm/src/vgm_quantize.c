@@ -3,7 +3,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "vgm_quantize.h"
-#include "base/arena.h"
+#include "vgm_alloc.h"
 #include <string.h>
 
 #define VGM_QUANTIZE_DEBUG 0
@@ -140,7 +140,7 @@ static u32 calculate_channel_spr(const VgmTimeline* timeline, u32 channel_idx, u
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Helper: quantize single channel
 
-static bool quantize_channel(RpArena* arena, const VgmTimeline* timeline, u32 channel_idx,
+static bool quantize_channel(VgmAllocator* alloc, const VgmTimeline* timeline, u32 channel_idx,
                              VgmChannelPattern* out_channel, VgmQuantizeConfig config) {
     // Count events for this channel
     u32 event_count = 0;
@@ -195,7 +195,7 @@ static bool quantize_channel(RpArena* arena, const VgmTimeline* timeline, u32 ch
     }
 
     // Allocate rows
-    out_channel->rows = arena_alloc_array(arena, VgmChannelRow, unique_rows);
+    out_channel->rows = (VgmChannelRow*)vgm_alloc_array(alloc, unique_rows * sizeof(VgmChannelRow));
     if (out_channel->rows == nullptr) {
         return false;
     }
@@ -267,7 +267,7 @@ static bool quantize_channel(RpArena* arena, const VgmTimeline* timeline, u32 ch
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Main quantization function
 
-VgmQuantizeResult vgm_quantize(RpArena* arena, const VgmTimeline* timeline, VgmQuantizeConfig config) {
+VgmQuantizeResult vgm_quantize(VgmAllocator* alloc, const VgmTimeline* timeline, VgmQuantizeConfig config) {
     VgmQuantizeResult result = { 0 };
 
     // Validate inputs
@@ -288,7 +288,7 @@ VgmQuantizeResult vgm_quantize(RpArena* arena, const VgmTimeline* timeline, VgmQ
     }
 
     // Allocate pattern
-    VgmPattern* pattern = arena_alloc_zero(arena, VgmPattern);
+    VgmPattern* pattern = (VgmPattern*)vgm_alloc(alloc, sizeof(VgmPattern));
     if (pattern == nullptr) {
         result.status = VGM_QUANTIZE_ERROR_ALLOCATION_FAILED;
         return result;
@@ -299,7 +299,7 @@ VgmQuantizeResult vgm_quantize(RpArena* arena, const VgmTimeline* timeline, VgmQ
 
     // Copy channel info
     if (timeline->channel_count > 0) {
-        pattern->channel_info = arena_alloc_array(arena, VgmChannelInfo, timeline->channel_count);
+        pattern->channel_info = (VgmChannelInfo*)vgm_alloc_array(alloc, timeline->channel_count * sizeof(VgmChannelInfo));
         if (pattern->channel_info == nullptr) {
             result.status = VGM_QUANTIZE_ERROR_ALLOCATION_FAILED;
             return result;
@@ -307,7 +307,7 @@ VgmQuantizeResult vgm_quantize(RpArena* arena, const VgmTimeline* timeline, VgmQ
         memcpy(pattern->channel_info, timeline->channels, timeline->channel_count * sizeof(VgmChannelInfo));
 
         // Allocate per-channel patterns
-        pattern->channels = arena_alloc_array(arena, VgmChannelPattern, timeline->channel_count);
+        pattern->channels = (VgmChannelPattern*)vgm_alloc_array(alloc, timeline->channel_count * sizeof(VgmChannelPattern));
         if (pattern->channels == nullptr) {
             result.status = VGM_QUANTIZE_ERROR_ALLOCATION_FAILED;
             return result;
@@ -316,7 +316,7 @@ VgmQuantizeResult vgm_quantize(RpArena* arena, const VgmTimeline* timeline, VgmQ
 
         // Quantize each channel independently
         for (u32 ch = 0; ch < timeline->channel_count; ch++) {
-            if (!quantize_channel(arena, timeline, ch, &pattern->channels[ch], config)) {
+            if (!quantize_channel(alloc, timeline, ch, &pattern->channels[ch], config)) {
                 result.status = VGM_QUANTIZE_ERROR_ALLOCATION_FAILED;
                 return result;
             }
