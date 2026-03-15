@@ -38,7 +38,6 @@ struct SidPlayData {
     ReSIDfpBuilder* builder;
     uint8_t* song_data;
     uint32_t song_data_size;
-    bool scope_enabled;
     int sid_count; // Number of SID chips used by current tune (1-3)
 };
 
@@ -352,11 +351,6 @@ static uint32_t sidplayfp_get_scope_data(void* user_data, int channel, float* bu
         return 0;
     }
 
-    if (!data->scope_enabled) {
-        data->builder->enableScopeCapture(true);
-        data->scope_enabled = true;
-    }
-
     return data->builder->getScopeData(channel, buffer, num_samples);
 }
 
@@ -391,6 +385,38 @@ static uint32_t sidplayfp_get_scope_channel_names(void* user_data, const char** 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+static int sidplayfp_get_tracker_info(void* user_data, RVTrackerInfo* info) {
+    SidPlayData* data = static_cast<SidPlayData*>(user_data);
+
+    if (data == nullptr || data->tune == nullptr || info == nullptr) {
+        return -1;
+    }
+
+    memset(info, 0, sizeof(RVTrackerInfo));
+
+    const SidTuneInfo* tune_info = data->tune->getInfo();
+    if (tune_info == nullptr) {
+        return -1;
+    }
+
+    // Info strings: 0=title, 1=author, 2=released
+    if (tune_info->numberOfInfoStrings() > 0 && tune_info->infoString(0)[0] != '\0') {
+        strncpy(info->song_name, tune_info->infoString(0), sizeof(info->song_name) - 1);
+    }
+    if (tune_info->numberOfInfoStrings() > 1 && tune_info->infoString(1)[0] != '\0') {
+        strncpy(info->artist_name, tune_info->infoString(1), sizeof(info->artist_name) - 1);
+    }
+    if (tune_info->numberOfInfoStrings() > 2 && tune_info->infoString(2)[0] != '\0') {
+        strncpy(info->game_name, tune_info->infoString(2), sizeof(info->game_name) - 1);
+    }
+
+    info->num_channels = data->sid_count * 3;
+
+    return 0;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 static RVPlaybackPlugin g_sidplayfp_plugin = {
     RV_PLAYBACK_PLUGIN_API_VERSION,
     "sidplayfp",
@@ -409,8 +435,8 @@ static RVPlaybackPlugin g_sidplayfp_plugin = {
     sidplayfp_static_init,
     nullptr, // settings_updated
 
-    // Tracker visualization API (not applicable to SID)
-    nullptr, // get_tracker_info
+    // Tracker visualization API
+    sidplayfp_get_tracker_info,
     nullptr, // get_pattern_cell
     nullptr, // get_pattern_num_rows
     sidplayfp_get_scope_data,
