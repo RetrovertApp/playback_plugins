@@ -19,3 +19,9 @@
 [submodule "plugins/spu"]
 	path = plugins/spu
 	url = https://github.com/retrovertapp/playback-spu.git
+[submodule "plugins/tfmx"]
+	path = plugins/tfmx
+	url = https://github.com/retrovertapp/playback-tfmx.git
+[submodule "plugins/ixalance"]
+	path = plugins/ixalance
+	url = https://github.com/retrovertapp/playback-ixalance.git
