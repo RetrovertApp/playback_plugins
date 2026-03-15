@@ -10,3 +10,12 @@
 [submodule "plugins/art_of_noise"]
 	path = plugins/art_of_noise
 	url = https://github.com/retrovertapp/playback-art-of-noise.git
+[submodule "plugins/asap"]
+	path = plugins/asap
+	url = https://github.com/retrovertapp/playback-asap.git
+[submodule "plugins/audio_stream"]
+	path = plugins/audio_stream
+	url = https://github.com/retrovertapp/playback-audio_stream.git
+[submodule "plugins/spu"]
+	path = plugins/spu
+	url = https://github.com/retrovertapp/playback-spu.git
