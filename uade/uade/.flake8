@@ -1,4 +1,0 @@
-[flake8]
-exclude = contrib/sinc-integral.py python/uade/typevalidator*.py
-
-

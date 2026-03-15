@@ -58,3 +58,27 @@
 [submodule "plugins/sunvox"]
 	path = plugins/sunvox
 	url = https://github.com/retrovertapp/playback-sunvox.git
+[submodule "plugins/furnace"]
+	path = plugins/furnace
+	url = https://github.com/retrovertapp/playback-furnace.git
+[submodule "plugins/libkss"]
+	path = plugins/libkss
+	url = https://github.com/retrovertapp/playback-libkss.git
+[submodule "plugins/libvgm"]
+	path = plugins/libvgm
+	url = https://github.com/retrovertapp/playback-libvgm.git
+[submodule "plugins/sc68"]
+	path = plugins/sc68
+	url = https://github.com/retrovertapp/playback-sc68.git
+[submodule "plugins/sidplayfp"]
+	path = plugins/sidplayfp
+	url = https://github.com/retrovertapp/playback-sidplayfp.git
+[submodule "plugins/uade"]
+	path = plugins/uade
+	url = https://github.com/retrovertapp/playback-uade.git
+[submodule "plugins/xsf"]
+	path = plugins/xsf
+	url = https://github.com/retrovertapp/playback-xsf.git
+[submodule "plugins/zxtune"]
+	path = plugins/zxtune
+	url = https://github.com/retrovertapp/playback-zxtune.git
