@@ -25,3 +25,36 @@
 [submodule "plugins/ixalance"]
 	path = plugins/ixalance
 	url = https://github.com/retrovertapp/playback-ixalance.git
+[submodule "plugins/cpsycle"]
+	path = plugins/cpsycle
+	url = https://github.com/retrovertapp/playback-cpsycle.git
+[submodule "plugins/eupmini"]
+	path = plugins/eupmini
+	url = https://github.com/retrovertapp/playback-eupmini.git
+[submodule "plugins/fmplayer"]
+	path = plugins/fmplayer
+	url = https://github.com/retrovertapp/playback-fmplayer.git
+[submodule "plugins/gme"]
+	path = plugins/gme
+	url = https://github.com/retrovertapp/playback-gme.git
+[submodule "plugins/klystrack"]
+	path = plugins/klystrack
+	url = https://github.com/retrovertapp/playback-klystrack.git
+[submodule "plugins/mdxmini"]
+	path = plugins/mdxmini
+	url = https://github.com/retrovertapp/playback-mdxmini.git
+[submodule "plugins/organya"]
+	path = plugins/organya
+	url = https://github.com/retrovertapp/playback-organya.git
+[submodule "plugins/pmdmini"]
+	path = plugins/pmdmini
+	url = https://github.com/retrovertapp/playback-pmdmini.git
+[submodule "plugins/pxtone"]
+	path = plugins/pxtone
+	url = https://github.com/retrovertapp/playback-pxtone.git
+[submodule "plugins/v2m"]
+	path = plugins/v2m
+	url = https://github.com/retrovertapp/playback-v2m.git
+[submodule "plugins/sunvox"]
+	path = plugins/sunvox
+	url = https://github.com/retrovertapp/playback-sunvox.git
