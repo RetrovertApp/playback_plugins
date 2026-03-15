@@ -106,7 +106,7 @@ function(apply_target_config target_name)
 endfunction()
 
 # Build all playback plugins
-add_subdirectory(adplug)
+add_subdirectory(plugins/adplug)
 add_subdirectory(art_of_noise)
 add_subdirectory(asap)
 add_subdirectory(audio_stream)

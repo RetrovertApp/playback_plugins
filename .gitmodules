@@ -4,3 +4,6 @@
 [submodule "plugins/hively"]
 	path = plugins/hively
 	url = https://github.com/retrovertapp/playback-hively.git
+[submodule "plugins/adplug"]
+	path = plugins/adplug
+	url = https://github.com/retrovertapp/playback-adplug.git
