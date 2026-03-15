@@ -7,3 +7,6 @@
 [submodule "plugins/adplug"]
 	path = plugins/adplug
 	url = https://github.com/retrovertapp/playback-adplug.git
+[submodule "plugins/art_of_noise"]
+	path = plugins/art_of_noise
+	url = https://github.com/retrovertapp/playback-art-of-noise.git

@@ -107,7 +107,7 @@ endfunction()
 
 # Build all playback plugins
 add_subdirectory(plugins/adplug)
-add_subdirectory(art_of_noise)
+add_subdirectory(plugins/art_of_noise)
 add_subdirectory(asap)
 add_subdirectory(audio_stream)
 add_subdirectory(cpsycle)
