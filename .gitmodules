@@ -1,3 +1,6 @@
 [submodule "plugins/openmpt"]
 	path = plugins/openmpt
 	url = https://github.com/retrovertapp/playback-openmpt.git
+[submodule "plugins/hively"]
+	path = plugins/hively
+	url = https://github.com/retrovertapp/playback-hively.git
