@@ -52,9 +52,6 @@
 [submodule "plugins/pxtone"]
 	path = plugins/pxtone
 	url = https://github.com/retrovertapp/playback-pxtone.git
-[submodule "plugins/v2m"]
-	path = plugins/v2m
-	url = https://github.com/retrovertapp/playback-v2m.git
 [submodule "plugins/sunvox"]
 	path = plugins/sunvox
 	url = https://github.com/retrovertapp/playback-sunvox.git
