@@ -14,13 +14,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(playback_plugins C CXX)
 
-# Find system zlib early so the ZLIB::ZLIB imported target is created before
-# any vendored zlib subdirectory can create an incomplete alias for it.
-# Several plugins vendor a minimal zlib (inflate/deflate only, no gzip I/O)
-# and create ZLIB::ZLIB as an alias if the target doesn't already exist.
-# Plugins like libvgm need full gzip support, so system zlib must take priority.
-find_package(ZLIB QUIET)
-
 add_subdirectory(plugins/adplug)
 add_subdirectory(plugins/art_of_noise)
 add_subdirectory(plugins/asap)

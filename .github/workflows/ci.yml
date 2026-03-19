@@ -55,9 +55,9 @@ jobs:
 
     - name: Verify all plugins built
       run: |
-        count=$(ls build/plugins/*_playback.so 2>/dev/null | wc -l)
+        count=$(ls build/plugins/*_playback.dylib 2>/dev/null | wc -l)
         echo "Built $count plugins"
-        ls build/plugins/*_playback.so
+        ls build/plugins/*_playback.dylib
         if [ "$count" -lt 27 ]; then
           echo "Expected 27 plugins, got $count"
           exit 1
