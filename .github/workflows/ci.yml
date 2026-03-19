@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        submodules: recursive
 
     - name: Install dependencies
       run: |
@@ -29,8 +31,8 @@ jobs:
         count=$(ls build/plugins/*_playback.so 2>/dev/null | wc -l)
         echo "Built $count plugins"
         ls build/plugins/*_playback.so
-        if [ "$count" -lt 26 ]; then
-          echo "Expected 26 plugins, got $count"
+        if [ "$count" -lt 27 ]; then
+          echo "Expected 27 plugins, got $count"
           exit 1
         fi
 
@@ -39,6 +41,8 @@ jobs:
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        submodules: recursive
 
     - name: Install dependencies
       run: brew install ninja
@@ -51,11 +55,11 @@ jobs:
 
     - name: Verify all plugins built
       run: |
-        count=$(ls build/plugins/*_playback.so 2>/dev/null | wc -l)
+        count=$(ls build/plugins/*_playback.dylib 2>/dev/null | wc -l)
         echo "Built $count plugins"
-        ls build/plugins/*_playback.so
-        if [ "$count" -lt 26 ]; then
-          echo "Expected 26 plugins, got $count"
+        ls build/plugins/*_playback.dylib
+        if [ "$count" -lt 27 ]; then
+          echo "Expected 27 plugins, got $count"
           exit 1
         fi
 
@@ -64,6 +68,8 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        submodules: recursive
 
     - name: Setup VS environment
       uses: ilammy/msvc-dev-cmd@v1
@@ -92,8 +98,8 @@ jobs:
         count=$(ls build/plugins/*_playback.dll 2>/dev/null | wc -l)
         echo "Built $count plugins"
         ls build/plugins/*_playback.dll
-        # UADE is Unix-only (requires POSIX APIs), so Windows builds 25 plugins
-        if [ "$count" -lt 25 ]; then
-          echo "Expected 25 plugins, got $count"
+        # UADE is Unix-only (requires POSIX APIs), so Windows builds 26 plugins
+        if [ "$count" -lt 26 ]; then
+          echo "Expected 26 plugins, got $count"
           exit 1
         fi
