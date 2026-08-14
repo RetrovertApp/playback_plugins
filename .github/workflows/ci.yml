@@ -31,8 +31,8 @@ jobs:
         count=$(ls build/plugins/*_playback.so 2>/dev/null | wc -l)
         echo "Built $count plugins"
         ls build/plugins/*_playback.so
-        if [ "$count" -lt 27 ]; then
-          echo "Expected 27 plugins, got $count"
+        if [ "$count" -lt 28 ]; then
+          echo "Expected 28 plugins, got $count"
           exit 1
         fi
 
@@ -58,8 +58,8 @@ jobs:
         count=$(ls build/plugins/*_playback.so 2>/dev/null | wc -l)
         echo "Built $count plugins"
         ls build/plugins/*_playback.so
-        if [ "$count" -lt 27 ]; then
-          echo "Expected 27 plugins, got $count"
+        if [ "$count" -lt 28 ]; then
+          echo "Expected 28 plugins, got $count"
           exit 1
         fi
 
@@ -98,8 +98,7 @@ jobs:
         count=$(ls build/plugins/*_playback.dll 2>/dev/null | wc -l)
         echo "Built $count plugins"
         ls build/plugins/*_playback.dll
-        # UADE is Unix-only (requires POSIX APIs), so Windows builds 26 plugins
-        if [ "$count" -lt 26 ]; then
-          echo "Expected 26 plugins, got $count"
+        if [ "$count" -lt 28 ]; then
+          echo "Expected 28 plugins, got $count"
           exit 1
         fi

@@ -79,3 +79,6 @@
 [submodule "plugins/zxtune"]
 	path = plugins/zxtune
 	url = https://github.com/retrovertapp/playback-zxtune.git
+[submodule "plugins/v2m"]
+	path = plugins/v2m
+	url = https://github.com/retrovertapp/playback-v2m.git
