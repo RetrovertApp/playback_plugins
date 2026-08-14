@@ -28,14 +28,16 @@ typedef struct SonixSongMetadata {
     uint32_t num_track_chunks;
 } SonixSongMetadata;
 
-// I/O callback: load file at path into malloc'd buffer. Caller frees *out_data.
+// Host-provided I/O callback: load a URL into a malloc'd buffer. Caller frees *out_data.
 typedef bool (*SonixReadFileFn)(const char* path, uint8_t** out_data, uint32_t* out_size, void* user_data);
 
-// Directory listing callback: call visitor(filename, ctx) for each file in dir.
+// Host-provided directory listing callback: call visitor(filename, ctx) for each entry.
 typedef int (*SonixListDirFn)(const char* dir_path, void (*visitor)(const char* filename, void* ctx), void* ctx,
                               void* user_data);
 
 typedef struct SonixIoCallbacks {
+    // Both callbacks are required by sonix_song_load_instruments(). A Retrovert
+    // plugin must bridge them to RVIo; the core never falls back to stdio.
     SonixReadFileFn read_file;
     SonixListDirFn list_dir;
     void* user_data;

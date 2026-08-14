@@ -9,12 +9,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifndef _WIN32
-#include <dirent.h>
-#else
-#include <io.h>
-#endif
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Helpers
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -46,79 +40,6 @@ static void lowercase_inplace(char* s) {
     for (; *s; s++) {
         *s = (char)tolower((unsigned char)*s);
     }
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Default I/O implementations
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-static bool default_read_file(const char* path, uint8_t** out_data, uint32_t* out_size, void* user_data) {
-    (void)user_data;
-    FILE* f = fopen(path, "rb");
-    if (!f)
-        return false;
-
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    if (size < 0) {
-        fclose(f);
-        return false;
-    }
-
-    uint8_t* buf = (uint8_t*)malloc((size_t)size);
-    if (!buf) {
-        fclose(f);
-        return false;
-    }
-
-    size_t read_count = fread(buf, 1, (size_t)size, f);
-    fclose(f);
-
-    if (read_count != (size_t)size) {
-        free(buf);
-        return false;
-    }
-
-    *out_data = buf;
-    *out_size = (uint32_t)size;
-    return true;
-}
-
-static int default_list_dir(const char* dir_path, void (*visitor)(const char* filename, void* ctx), void* ctx,
-                            void* user_data) {
-    (void)user_data;
-#ifndef _WIN32
-    DIR* d = opendir(dir_path);
-    if (!d)
-        return -1;
-    struct dirent* entry;
-    int count = 0;
-    while ((entry = readdir(d)) != NULL) {
-        if (entry->d_name[0] == '.')
-            continue;
-        visitor(entry->d_name, ctx);
-        count++;
-    }
-    closedir(d);
-    return count;
-#else
-    char pattern[512];
-    snprintf(pattern, sizeof(pattern), "%s\\*", dir_path);
-    struct _finddata_t fd;
-    intptr_t handle = _findfirst(pattern, &fd);
-    if (handle == -1)
-        return -1;
-    int count = 0;
-    do {
-        if (fd.name[0] == '.')
-            continue;
-        visitor(fd.name, ctx);
-        count++;
-    } while (_findnext(handle, &fd) == 0);
-    _findclose(handle);
-    return count;
-#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -923,8 +844,7 @@ typedef struct {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-static void add_sidecar_dir(SonixSidecarDirs* sd, const char* path, SonixReadFileFn read_fn, SonixListDirFn list_fn,
-                            void* user_data) {
+static void add_sidecar_dir(SonixSidecarDirs* sd, const char* path, SonixListDirFn list_fn, void* user_data) {
     if (sd->count >= SONIX_MAX_SIDECAR_DIRS)
         return;
 
@@ -943,56 +863,8 @@ static void add_sidecar_dir(SonixSidecarDirs* sd, const char* path, SonixReadFil
     sd->count++;
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// A list_dir callback that accepts NULL visitor (just checks existence)
-static int default_list_dir_check(const char* dir_path, void (*visitor)(const char* filename, void* ctx), void* ctx,
-                                  void* user_data) {
-    (void)user_data;
-#ifndef _WIN32
-    DIR* d = opendir(dir_path);
-    if (!d)
-        return -1;
-    if (visitor) {
-        struct dirent* entry;
-        int count = 0;
-        while ((entry = readdir(d)) != NULL) {
-            if (entry->d_name[0] == '.')
-                continue;
-            visitor(entry->d_name, ctx);
-            count++;
-        }
-        closedir(d);
-        return count;
-    }
-    closedir(d);
-    return 0;
-#else
-    char pattern[512];
-    snprintf(pattern, sizeof(pattern), "%s\\*", dir_path);
-    struct _finddata_t fd;
-    intptr_t handle = _findfirst(pattern, &fd);
-    if (handle == -1)
-        return -1;
-    if (visitor) {
-        int count = 0;
-        do {
-            if (fd.name[0] == '.')
-                continue;
-            visitor(fd.name, ctx);
-            count++;
-        } while (_findnext(handle, &fd) == 0);
-        _findclose(handle);
-        return count;
-    }
-    _findclose(handle);
-    return 0;
-#endif
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-static void collect_sidecar_dirs(const char* input_file, SonixSidecarDirs* sd, SonixReadFileFn read_fn,
-                                 SonixListDirFn list_fn, void* user_data) {
+static void collect_sidecar_dirs(const char* input_file, SonixSidecarDirs* sd, SonixListDirFn list_fn,
+                                 void* user_data) {
     sd->count = 0;
 
     // Find parent directory
@@ -1009,14 +881,14 @@ static void collect_sidecar_dirs(const char* input_file, SonixSidecarDirs* sd, S
         snprintf(parent, sizeof(parent), ".");
     }
 
-    add_sidecar_dir(sd, parent, read_fn, list_fn, user_data);
+    add_sidecar_dir(sd, parent, list_fn, user_data);
 
     // parent/Instruments and parent/instruments
     char sub[512];
     snprintf(sub, sizeof(sub), "%s/Instruments", parent);
-    add_sidecar_dir(sd, sub, read_fn, list_fn, user_data);
+    add_sidecar_dir(sd, sub, list_fn, user_data);
     snprintf(sub, sizeof(sub), "%s/instruments", parent);
-    add_sidecar_dir(sd, sub, read_fn, list_fn, user_data);
+    add_sidecar_dir(sd, sub, list_fn, user_data);
 
     // grandparent/Instruments
     char grandparent[512];
@@ -1029,9 +901,9 @@ static void collect_sidecar_dirs(const char* input_file, SonixSidecarDirs* sd, S
     if (last_sep) {
         *last_sep = '\0';
         snprintf(sub, sizeof(sub), "%s/Instruments", grandparent);
-        add_sidecar_dir(sd, sub, read_fn, list_fn, user_data);
+        add_sidecar_dir(sd, sub, list_fn, user_data);
         snprintf(sub, sizeof(sub), "%s/instruments", grandparent);
-        add_sidecar_dir(sd, sub, read_fn, list_fn, user_data);
+        add_sidecar_dir(sd, sub, list_fn, user_data);
 
         // great-grandparent/Instruments
         char ggparent[512];
@@ -1044,9 +916,9 @@ static void collect_sidecar_dirs(const char* input_file, SonixSidecarDirs* sd, S
         if (last_sep) {
             *last_sep = '\0';
             snprintf(sub, sizeof(sub), "%s/Instruments", ggparent);
-            add_sidecar_dir(sd, sub, read_fn, list_fn, user_data);
+            add_sidecar_dir(sd, sub, list_fn, user_data);
             snprintf(sub, sizeof(sub), "%s/instruments", ggparent);
-            add_sidecar_dir(sd, sub, read_fn, list_fn, user_data);
+            add_sidecar_dir(sd, sub, list_fn, user_data);
         }
     }
 }
@@ -1103,14 +975,17 @@ int sonix_song_load_instruments(SonixSong* song, const char* song_file_path) {
     if (meta->format != SONIX_FORMAT_SNX && meta->format != SONIX_FORMAT_SMUS && meta->format != SONIX_FORMAT_TINY)
         return 0;
 
-    // Get I/O callbacks (fall back to defaults)
+    // Sidecar loading must be supplied by the host (an eventual plugin bridge
+    // will implement these callbacks with RVIo).
     const SonixIoCallbacks* io = sonix_song_get_io_callbacks(song);
-    SonixReadFileFn read_fn = (io && io->read_file) ? io->read_file : default_read_file;
-    SonixListDirFn list_fn = (io && io->list_dir) ? io->list_dir : default_list_dir_check;
-    void* ud = io ? io->user_data : NULL;
+    if (!io || !io->read_file || !io->list_dir)
+        return 0;
+    SonixReadFileFn read_fn = io->read_file;
+    SonixListDirFn list_fn = io->list_dir;
+    void* ud = io->user_data;
 
     SonixSidecarDirs sd;
-    collect_sidecar_dirs(song_file_path, &sd, read_fn, list_fn, ud);
+    collect_sidecar_dirs(song_file_path, &sd, list_fn, ud);
 
     SonixFileMap map;
     build_sidecar_file_map(&sd, &map, list_fn, ud);
