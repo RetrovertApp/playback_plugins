@@ -31,8 +31,8 @@ jobs:
         count=$(ls build/plugins/*_playback.so 2>/dev/null | wc -l)
         echo "Built $count plugins"
         ls build/plugins/*_playback.so
-        if [ "$count" -lt 28 ]; then
-          echo "Expected 28 plugins, got $count"
+        if [ "$count" -lt 29 ]; then
+          echo "Expected 29 plugins, got $count"
           exit 1
         fi
 
@@ -58,8 +58,8 @@ jobs:
         count=$(ls build/plugins/*_playback.so 2>/dev/null | wc -l)
         echo "Built $count plugins"
         ls build/plugins/*_playback.so
-        if [ "$count" -lt 28 ]; then
-          echo "Expected 28 plugins, got $count"
+        if [ "$count" -lt 29 ]; then
+          echo "Expected 29 plugins, got $count"
           exit 1
         fi
 
@@ -98,7 +98,7 @@ jobs:
         count=$(ls build/plugins/*_playback.dll 2>/dev/null | wc -l)
         echo "Built $count plugins"
         ls build/plugins/*_playback.dll
-        if [ "$count" -lt 28 ]; then
-          echo "Expected 28 plugins, got $count"
+        if [ "$count" -lt 29 ]; then
+          echo "Expected 29 plugins, got $count"
           exit 1
         fi

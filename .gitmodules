@@ -82,3 +82,6 @@
 [submodule "plugins/v2m"]
 	path = plugins/v2m
 	url = https://github.com/retrovertapp/playback-v2m.git
+[submodule "plugins/pretracker"]
+	path = plugins/pretracker
+	url = https://github.com/retrovertapp/playback-pretracker.git
