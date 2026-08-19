@@ -90,7 +90,9 @@ def main():
 
     if args.host:
         modules = [str((generation / f"{name}_playback{lib_suffix}").resolve()) for name in plugins]
-        result = subprocess.run([str(args.host)] + modules)
+        # Path() drops a leading './', which would turn the host into a
+        # PATH lookup; resolve it so subprocess execs the file itself.
+        result = subprocess.run([str(args.host.resolve())] + modules)
         if result.returncode != 0:
             fail("whole-set load failed")
         info(f"whole-set load passed: {len(modules)} plugins loaded simultaneously")
