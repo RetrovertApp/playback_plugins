@@ -1,0 +1,283 @@
+# The publication transaction for a channel release set.
+#
+# An authorized `<channel>/vN` tag push gathers the roster's pinned,
+# provenance-attested artifacts from the per-plugin builds caches, runs the
+# set-level validation on every release target, copies the set into the tag's
+# release in channel form, and then hands off to the signer in
+# retrovert-channels, which publishes the TUF metadata last. That metadata
+# write is the atomic commit point: a failure anywhere before it leaves the
+# channel serving its previous generation, with at most unreferenced assets
+# on this repository's releases.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'dev/v*'
+      - 'stable/v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  gather:
+    runs-on: ubuntu-24.04
+    # Holds the build-dispatch App credentials and the recorded armbox
+    # override; its deployment policy restricts runs to dev/* and stable/*
+    # tags.
+    environment: release
+    outputs:
+      channel: ${{ steps.tag.outputs.channel }}
+      version: ${{ steps.tag.outputs.version }}
+      harness: ${{ steps.roster.outputs.harness }}
+      toolchain_image: ${{ steps.toolchain.outputs.toolchain_image }}
+    steps:
+      - name: Parse the release tag
+        id: tag
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^(dev|stable)/v([0-9]+)$ ]]; then
+            echo "::error::tag '$GITHUB_REF_NAME' is not <channel>/vN"
+            exit 1
+          fi
+          echo "channel=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          echo "version=${BASH_REMATCH[2]}" >> "$GITHUB_OUTPUT"
+
+      # The armbox playback smoke gates by default. Until its CI attachment
+      # lands, each release must carry a recorded override naming this exact
+      # tag, so a stale justification cannot silently waive the next release.
+      - name: Armbox smoke gate
+        env:
+          OVERRIDE: ${{ vars.ARMBOX_SMOKE_OVERRIDE }}
+        run: |
+          if [ -z "$OVERRIDE" ]; then
+            echo "::error::armbox smoke has no CI attachment and no manual override is recorded; set ARMBOX_SMOKE_OVERRIDE in the release environment to '$GITHUB_REF_NAME: <justification>'"
+            exit 1
+          fi
+          # Anchored on '<tag>: ' so an override for dev/v21 cannot waive
+          # dev/v2.
+          case "$OVERRIDE" in
+            "$GITHUB_REF_NAME: "*) ;;
+            *)
+              echo "::error::ARMBOX_SMOKE_OVERRIDE is not of the form '$GITHUB_REF_NAME: <justification>'; re-record it for this release"
+              exit 1
+              ;;
+          esac
+          {
+            echo "## Armbox smoke: manual override"
+            echo ""
+            echo "> $OVERRIDE"
+            echo ""
+            echo "Recorded in the release environment; release triggered by @$GITHUB_ACTOR."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/checkout@v4
+
+      - name: Read the roster
+        id: roster
+        run: |
+          python3 - <<'EOF' >> "$GITHUB_OUTPUT"
+          import tomllib, re, sys
+          roster = tomllib.load(open("channels/${{ steps.tag.outputs.channel }}/roster.toml", "rb"))
+          if not re.fullmatch(r"v[0-9]+", roster["harness"]):
+              sys.exit(f"roster harness tag {roster['harness']!r} is not of the form vN")
+          print(f"harness={roster['harness']}")
+          repos = []
+          modules = open(".gitmodules").read()
+          for name in roster["plugins"]:
+              m = re.search(rf'\[submodule "plugins/{name}"\]\s*\n\s*path[^\n]*\n\s*url\s*=\s*\S*github\.com[:/][^/]+/([^\s/]+?)(\.git)?\s*(\n|$)', modules)
+              if not m:
+                  sys.exit(f"no submodule url for roster plugin {name}")
+              repos.append(m.group(1))
+          print("repos=" + ",".join(sorted(set(repos))))
+          EOF
+
+      - name: Pin the harness toolchain image
+        id: toolchain
+        run: |
+          curl -fsSL -o harness-build-plugin.yml \
+            "https://raw.githubusercontent.com/RetrovertApp/retrovert-build-harness/refs/tags/${{ steps.roster.outputs.harness }}/.github/workflows/build-plugin.yml"
+          image=$(grep -oP 'image:\s*\K\S+' harness-build-plugin.yml | head -1)
+          if [[ "$image" != *"@sha256:"* ]]; then
+            echo "::error::could not resolve a digest-pinned toolchain image from the harness workflow"
+            exit 1
+          fi
+          echo "toolchain_image=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Mint a dispatch token for the roster repositories
+        id: dispatch-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.DISPATCH_APP_ID }}
+          private-key: ${{ secrets.DISPATCH_APP_PRIVATE_KEY }}
+          owner: RetrovertApp
+          repositories: ${{ steps.roster.outputs.repos }}
+
+      - name: Gather the release set
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISPATCH_TOKEN: ${{ steps.dispatch-token.outputs.token }}
+        run: |
+          python3 scripts/release/gather.py \
+            --channel "${{ steps.tag.outputs.channel }}" \
+            --version "${{ steps.tag.outputs.version }}" \
+            --out out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-set
+          path: out/
+          if-no-files-found: error
+
+  validate-linux:
+    needs: gather
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x86_64
+            runner: ubuntu-24.04
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+    name: validate (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    # The whole-set load runs where the artifacts will actually run: inside
+    # the harness's glibc-2.28-floor toolchain container.
+    container:
+      image: ${{ needs.gather.outputs.toolchain_image }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: RetrovertApp/retrovert-build-harness
+          ref: ${{ needs.gather.outputs.harness }}
+          path: harness
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-set
+          path: out
+      - name: Build the set-load host
+        run: gcc -std=c11 -Wall -Wextra -Werror -I harness/abi scripts/release/rv_set_load.c -o rv_set_load -ldl
+      - name: Validate the set
+        run: |
+          python3.11 scripts/release/set_validate.py \
+            --target "${{ matrix.target }}" \
+            --channel "${{ needs.gather.outputs.channel }}" \
+            --artifacts out/artifacts \
+            --generation generation \
+            --host ./rv_set_load
+
+  validate-windows:
+    needs: gather
+    name: validate (windows-x86_64)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: RetrovertApp/retrovert-build-harness
+          ref: ${{ needs.gather.outputs.harness }}
+          path: harness
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-set
+          path: out
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      # The image's default python is 3.9: no tomllib, and extraction would
+      # lose the tarfile data filter.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install zstandard==0.23.0
+      - name: Build the set-load host
+        run: cl /nologo /W4 /WX /I harness\abi scripts\release\rv_set_load.c /Fe:rv_set_load.exe
+      - name: Validate the set
+        run: |
+          python scripts/release/set_validate.py `
+            --target windows-x86_64 `
+            --channel "${{ needs.gather.outputs.channel }}" `
+            --artifacts out/artifacts `
+            --generation generation `
+            --host ./rv_set_load.exe
+
+  publish:
+    needs: [gather, validate-linux, validate-windows]
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: write
+    env:
+      CHANNEL: ${{ needs.gather.outputs.channel }}
+      VERSION: ${{ needs.gather.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-set
+          path: out
+
+      # The artifacts must be resolvable before the metadata that names them
+      # exists; the signer uploads only metadata.
+      - name: Copy the set into the tag's release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease="--prerelease"
+          if [ "$CHANNEL" = "stable" ]; then prerelease=""; fi
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag $prerelease \
+              --title "$GITHUB_REF_NAME" \
+              --notes "Release set $CHANNEL/v$VERSION. Authenticated by the channel's signed manifest; assets here are not individually trusted."
+          gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber \
+            out/artifacts/* out/manifest.json
+
+      - name: Mint a token for the signer repository
+        id: signer-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.DISPATCH_APP_ID }}
+          private-key: ${{ secrets.DISPATCH_APP_PRIVATE_KEY }}
+          owner: RetrovertApp
+          repositories: retrovert-channels
+
+      - name: Hand off to the signer
+        env:
+          GH_TOKEN: ${{ steps.signer-token.outputs.token }}
+        run: |
+          manifest_sha256=$(sha256sum out/manifest.json | cut -d' ' -f1)
+          started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          gh workflow run publish.yml --repo RetrovertApp/retrovert-channels \
+            -f "channel=$CHANNEL" \
+            -f "version=$VERSION" \
+            -f "manifest_sha256=$manifest_sha256"
+          echo "dispatched signer for $CHANNEL/v$VERSION (manifest $manifest_sha256)"
+
+          # The signer puts the manifest digest in its run title, so this
+          # watcher cannot latch onto a concurrent dispatch for another
+          # channel or version.
+          run_id=""
+          for _ in $(seq 1 30); do
+            sleep 10
+            run_id=$(gh run list --repo RetrovertApp/retrovert-channels \
+              --workflow publish.yml --event workflow_dispatch \
+              --created ">=$started" --limit 20 --json databaseId,displayTitle \
+              --jq ".[] | select(.displayTitle | contains(\"$manifest_sha256\")) | .databaseId" | head -1)
+            if [ -n "$run_id" ]; then break; fi
+          done
+          if [ -z "$run_id" ]; then
+            echo "::error::signer run did not appear within five minutes"
+            exit 1
+          fi
+          echo "signer run: https://github.com/RetrovertApp/retrovert-channels/actions/runs/$run_id"
+          if ! gh run watch "$run_id" --repo RetrovertApp/retrovert-channels --exit-status --interval 15; then
+            echo "::error::the signer did not succeed; check its run before retrying — the channel is untouched unless its log shows the metadata commit"
+            exit 1
+          fi
+          echo "## Published" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`$CHANNEL/v$VERSION\` is live; manifest \`$manifest_sha256\`." >> "$GITHUB_STEP_SUMMARY"
