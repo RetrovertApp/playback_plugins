@@ -1,2 +1,2 @@
-harness = "v2"
+harness = "v3"
 plugins = ["spu", "uade", "openmpt"]
