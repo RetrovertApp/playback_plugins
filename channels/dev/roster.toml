@@ -1,2 +1,21 @@
-harness = "v4"
-plugins = ["spu", "uade", "openmpt"]
+harness = "v5"
+plugins = [
+    "adplug",
+    "asap",
+    "audio_stream",
+    "cpsycle",
+    "eupmini",
+    "gme",
+    "hively",
+    "klystrack",
+    "libvgm",
+    "mdxmini",
+    "openmpt",
+    "pmdmini",
+    "pretracker",
+    "sc68",
+    "spu",
+    "uade",
+    "v2m",
+    "zxtune",
+]
