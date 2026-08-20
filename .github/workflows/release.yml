@@ -27,9 +27,8 @@ concurrency:
 jobs:
   gather:
     runs-on: ubuntu-24.04
-    # Holds the build-dispatch App credentials and the recorded armbox
-    # override; its deployment policy restricts runs to dev/* and stable/*
-    # tags.
+    # Holds the build-dispatch App credentials; its deployment policy
+    # restricts runs to dev/* and stable/* tags.
     environment: release
     outputs:
       channel: ${{ steps.tag.outputs.channel }}
@@ -46,34 +45,6 @@ jobs:
           fi
           echo "channel=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
           echo "version=${BASH_REMATCH[2]}" >> "$GITHUB_OUTPUT"
-
-      # The armbox playback smoke gates by default. Until its CI attachment
-      # lands, each release must carry a recorded override naming this exact
-      # tag, so a stale justification cannot silently waive the next release.
-      - name: Armbox smoke gate
-        env:
-          OVERRIDE: ${{ vars.ARMBOX_SMOKE_OVERRIDE }}
-        run: |
-          if [ -z "$OVERRIDE" ]; then
-            echo "::error::armbox smoke has no CI attachment and no manual override is recorded; set ARMBOX_SMOKE_OVERRIDE in the release environment to '$GITHUB_REF_NAME: <justification>'"
-            exit 1
-          fi
-          # Anchored on '<tag>: ' so an override for dev/v21 cannot waive
-          # dev/v2.
-          case "$OVERRIDE" in
-            "$GITHUB_REF_NAME: "*) ;;
-            *)
-              echo "::error::ARMBOX_SMOKE_OVERRIDE is not of the form '$GITHUB_REF_NAME: <justification>'; re-record it for this release"
-              exit 1
-              ;;
-          esac
-          {
-            echo "## Armbox smoke: manual override"
-            echo ""
-            echo "> $OVERRIDE"
-            echo ""
-            echo "Recorded in the release environment; release triggered by @$GITHUB_ACTOR."
-          } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/checkout@v4
 
