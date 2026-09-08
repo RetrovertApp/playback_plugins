@@ -1,4 +1,4 @@
-harness = "v5"
+harness = "v9"
 plugins = [
     "adplug",
     "asap",
@@ -15,6 +15,7 @@ plugins = [
     "pretracker",
     "sc68",
     "spu",
+    "sunvox",
     "uade",
     "v2m",
     "zxtune",
