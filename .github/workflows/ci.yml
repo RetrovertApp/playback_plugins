@@ -7,6 +7,15 @@ on:
     branches: [ main ]
 
 jobs:
+  scripts:
+    name: Scripts
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Test the plugin operations scripts
+      run: scripts/tests/ops-test.sh
+
   build-linux:
     name: Linux
     runs-on: ubuntu-latest
