@@ -11,6 +11,12 @@
 # roll never drags unreviewed commits into the roster or discards local ones. Only
 # plugins that were actually rolled have their pin bumped, and the aggregate's pin
 # commit is never pushed.
+#
+# Every remote is proved writable before any repository is touched, because the
+# commit precedes the push and a push that cannot authenticate would otherwise
+# leave the roll half applied. A roll that still half applies -- the rewrite is
+# committed, the push does not land -- is finished by re-running: the rewritten
+# workflow already names the target, so the plugin is resumed rather than skipped.
 
 set -uo pipefail
 
@@ -55,6 +61,24 @@ if [ "$apply" -eq 1 ] && [ "$verify" -eq 1 ]; then
     fi
 fi
 
+if [ "$apply" -eq 1 ]; then
+    unwritable=""
+    for dir in "$root"/plugins/*/; do
+        [ -d "$dir/include/retrovert" ] || continue
+        [ -f "$dir.github/workflows/release-build.yml" ] || continue
+        # a throwaway branch name, so this proves write access rather than
+        # whether this particular plugin's master could fast-forward today
+        GIT_TERMINAL_PROMPT=0 git -C "$dir" push --quiet --dry-run origin \
+            "HEAD:refs/heads/__roll_preflight__" 2>/dev/null \
+            || unwritable="$unwritable $(basename "$dir")"
+    done
+    if [ -n "$unwritable" ]; then
+        echo "$self: cannot push to:$unwritable" >&2
+        echo "$self: nothing was modified; fix those remotes and re-run" >&2
+        exit 1
+    fi
+fi
+
 edits=0
 rolled=""
 refused=""
@@ -72,7 +96,26 @@ for dir in "$root"/plugins/*/; do
         continue
     fi
     old="${found[0]}"
-    [ "$old" = "$target" ] && continue
+    if [ "$old" = "$target" ]; then
+        [ "$apply" -eq 1 ] || continue
+        git -C "$dir" fetch --quiet origin master || continue
+        [ "$(git -C "$dir" rev-parse HEAD)" = "$(git -C "$dir" rev-parse origin/master)" ] && continue
+        # ahead of the remote with the rewrite already committed: an unfinished
+        # roll. Diverged history is someone else's business, so leave it alone.
+        if ! git -C "$dir" merge-base --is-ancestor origin/master HEAD; then
+            echo "$name: rewritten but diverged from origin/master, not rolled" >&2
+            refused="$refused $name"
+            continue
+        fi
+        echo "$name: rewritten but never pushed, finishing"
+        if git -C "$dir" push --quiet origin HEAD:master; then
+            rolled="$rolled plugins/$name"
+        else
+            echo "$name: push failed" >&2
+            refused="$refused $name"
+        fi
+        continue
+    fi
 
     edits=$((edits + 1))
     echo "$name: $old -> $target"

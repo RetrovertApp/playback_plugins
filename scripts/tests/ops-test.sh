@@ -255,6 +255,47 @@ check "exits non-zero on a dirty submodule" test "$rc" -ne 0
 check "says the worktree is dirty" grep -q "uade: worktree is dirty" <<<"$out"
 check "leaves the dirty plugin unrolled" \
     grep -qF "$USES_OLD" "$agg/plugins/uade/.github/workflows/release-build.yml"
+rm -f "$agg/plugins/uade/dirty.txt"
+
+# --- roll-harness.sh (push preflight) ---------------------------------------
+echo "roll-harness.sh (push preflight)"
+
+# the commit precedes the push, so a remote that cannot be written would leave
+# the roll half applied. Nothing may be touched when any remote is unwritable.
+git_q -C "$agg/plugins/uade" remote set-url origin "$work/remotes/gone.git"
+healthy_before="$(cat "$agg/plugins/openmpt/.github/workflows/release-build.yml")"
+out="$("$scripts/roll-harness.sh" "$USES_V11" --apply --no-verify-target 2>&1)"; rc=$?
+check "exits non-zero when a remote cannot be pushed to" test "$rc" -ne 0
+check "names the unwritable plugin" grep -q "cannot push to.*uade" <<<"$out"
+check "says nothing was modified" grep -q "nothing was modified" <<<"$out"
+check "does not roll the healthy plugin either" \
+    same "$(cat "$agg/plugins/openmpt/.github/workflows/release-build.yml")" "$healthy_before"
+check "does not touch the unwritable plugin" \
+    grep -qF "$USES_OLD" "$agg/plugins/uade/.github/workflows/release-build.yml"
+git_q -C "$agg/plugins/uade" remote set-url origin "$work/remotes/uade.git"
+
+# --- roll-harness.sh (resume) -----------------------------------------------
+echo "roll-harness.sh (resume)"
+
+# a roll whose push did not land leaves the rewrite committed locally. Re-running
+# must finish it, not skip it as already-at-target.
+git_q -C "$agg/plugins/uade" switch -C master origin/master
+sed -i "s|$USES_OLD|$USES_NEW|" "$agg/plugins/uade/.github/workflows/release-build.yml"
+git_q -C "$agg/plugins/uade" commit -m "Roll the release harness to harness/v10" \
+    -- .github/workflows/release-build.yml
+stranded="$(git -C "$agg/plugins/uade" rev-parse HEAD)"
+out="$("$scripts/roll-harness.sh" "$USES_NEW" --apply --no-verify-target 2>&1)"; rc=$?
+check "exits 0" same "$rc" 0
+check "reports finishing the unpushed roll" grep -q "uade: rewritten but never pushed" <<<"$out"
+check "pushes the stranded commit" \
+    same "$(git -C "$work/remotes/uade.git" rev-parse master)" "$stranded"
+check "bumps the resumed plugin's pin" \
+    same "$(git -C "$agg" rev-parse ":plugins/uade")" "$stranded"
+
+# with the push landed, a further run has nothing left to do
+out="$("$scripts/roll-harness.sh" "$USES_NEW" --apply --no-verify-target 2>&1)"; rc=$?
+check "does not resume a plugin that is fully rolled" \
+    test -z "$(grep "never pushed" <<<"$out")"
 
 echo
 if [ "$failures" -eq 0 ]; then
