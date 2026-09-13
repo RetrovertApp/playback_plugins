@@ -4,7 +4,7 @@
 # provenance-attested artifacts from the per-plugin builds caches, runs the
 # set-level validation on every release target, copies the set into the tag's
 # release in channel form, and then hands off to the signer in
-# retrovert-channels, which publishes the TUF metadata last. That metadata
+# the retrovert monorepo, which publishes the TUF metadata last. That metadata
 # write is the atomic commit point: a failure anywhere before it leaves the
 # channel serving its previous generation, with at most unreferenced assets
 # on this repository's releases.
@@ -71,7 +71,7 @@ jobs:
         id: toolchain
         run: |
           curl -fsSL -o harness-build-plugin.yml \
-            "https://raw.githubusercontent.com/RetrovertApp/retrovert-build-harness/refs/tags/${{ steps.roster.outputs.harness }}/.github/workflows/build-plugin.yml"
+            "https://raw.githubusercontent.com/RetrovertApp/retrovert/refs/tags/harness/${{ steps.roster.outputs.harness }}/.github/workflows/build-plugin.yml"
           image=$(grep -oP 'image:\s*\K\S+' harness-build-plugin.yml | head -1)
           if [[ "$image" != *"@sha256:"* ]]; then
             echo "::error::could not resolve a digest-pinned toolchain image from the harness workflow"
@@ -124,15 +124,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
-          repository: RetrovertApp/retrovert-build-harness
-          ref: ${{ needs.gather.outputs.harness }}
-          path: harness
+          repository: RetrovertApp/retrovert
+          ref: harness/${{ needs.gather.outputs.harness }}
+          path: monorepo
       - uses: actions/download-artifact@v4
         with:
           name: release-set
           path: out
       - name: Build the set-load host
-        run: gcc -std=c11 -Wall -Wextra -Werror -I harness/abi scripts/release/rv_set_load.c -o rv_set_load -ldl
+        run: gcc -std=c11 -Wall -Wextra -Werror -I monorepo/harness/abi scripts/release/rv_set_load.c -o rv_set_load -ldl
       - name: Validate the set
         run: |
           python3.11 scripts/release/set_validate.py \
@@ -150,9 +150,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
-          repository: RetrovertApp/retrovert-build-harness
-          ref: ${{ needs.gather.outputs.harness }}
-          path: harness
+          repository: RetrovertApp/retrovert
+          ref: harness/${{ needs.gather.outputs.harness }}
+          path: monorepo
       - uses: actions/download-artifact@v4
         with:
           name: release-set
@@ -167,7 +167,7 @@ jobs:
           python-version: '3.12'
       - run: pip install zstandard==0.23.0
       - name: Build the set-load host
-        run: cl /nologo /W4 /WX /I harness\abi scripts\release\rv_set_load.c /Fe:rv_set_load.exe
+        run: cl /nologo /W4 /WX /I monorepo\harness\abi scripts\release\rv_set_load.c /Fe:rv_set_load.exe
       - name: Validate the set
         run: |
           python scripts/release/set_validate.py `
@@ -214,7 +214,7 @@ jobs:
           app-id: ${{ vars.DISPATCH_APP_ID }}
           private-key: ${{ secrets.DISPATCH_APP_PRIVATE_KEY }}
           owner: RetrovertApp
-          repositories: retrovert-channels
+          repositories: retrovert
 
       - name: Hand off to the signer
         env:
@@ -222,7 +222,7 @@ jobs:
         run: |
           manifest_sha256=$(sha256sum out/manifest.json | cut -d' ' -f1)
           started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          gh workflow run publish.yml --repo RetrovertApp/retrovert-channels \
+          gh workflow run publish.yml --repo RetrovertApp/retrovert \
             -f "channel=$CHANNEL" \
             -f "version=$VERSION" \
             -f "manifest_sha256=$manifest_sha256"
@@ -234,7 +234,7 @@ jobs:
           run_id=""
           for _ in $(seq 1 30); do
             sleep 10
-            run_id=$(gh run list --repo RetrovertApp/retrovert-channels \
+            run_id=$(gh run list --repo RetrovertApp/retrovert \
               --workflow publish.yml --event workflow_dispatch \
               --created ">=$started" --limit 20 --json databaseId,displayTitle \
               --jq ".[] | select(.displayTitle | contains(\"$manifest_sha256\")) | .databaseId" | head -1)
@@ -244,8 +244,8 @@ jobs:
             echo "::error::signer run did not appear within five minutes"
             exit 1
           fi
-          echo "signer run: https://github.com/RetrovertApp/retrovert-channels/actions/runs/$run_id"
-          if ! gh run watch "$run_id" --repo RetrovertApp/retrovert-channels --exit-status --interval 15; then
+          echo "signer run: https://github.com/RetrovertApp/retrovert/actions/runs/$run_id"
+          if ! gh run watch "$run_id" --repo RetrovertApp/retrovert --exit-status --interval 15; then
             echo "::error::the signer did not succeed; check its run before retrying — the channel is untouched unless its log shows the metadata commit"
             exit 1
           fi

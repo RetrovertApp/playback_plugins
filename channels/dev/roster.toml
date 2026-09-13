@@ -1,4 +1,4 @@
-harness = "v9"
+harness = "v10"
 plugins = [
     "adplug",
     "art_of_noise",

@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 TARGETS = ["linux-x86_64", "linux-arm64", "windows-x86_64"]
-SIGNER_WORKFLOW = "RetrovertApp/retrovert-build-harness/.github/workflows/build-plugin.yml"
+SIGNER_WORKFLOW = "RetrovertApp/retrovert/.github/workflows/build-plugin.yml"
 PREDICATE_TYPE = "https://slsa.dev/provenance/v1"
 CALLER_WORKFLOW = "release-build.yml"
 DISPATCH_TIMEOUT_S = 45 * 60
@@ -207,7 +207,7 @@ def verify_provenance(path, repo, pin, harness):
         )
     except subprocess.CalledProcessError as err:
         fail(f"{path.name}: attestation verification failed: {err.stderr.strip()}")
-    expected_builder = f"https://github.com/{SIGNER_WORKFLOW}@refs/tags/{harness}"
+    expected_builder = f"https://github.com/{SIGNER_WORKFLOW}@refs/tags/harness/{harness}"
     # Repo capitalization differs between .gitmodules and the attestation URI;
     # GitHub treats owner/name case-insensitively.
     expected_uri = f"https://github.com/{repo}@".lower()
@@ -223,7 +223,7 @@ def verify_provenance(path, repo, pin, harness):
                 return
     fail(
         f"{path.name}: no attestation binds this artifact to {repo}@{pin[:12]} "
-        f"built by {SIGNER_WORKFLOW}@{harness}"
+        f"built by {SIGNER_WORKFLOW}@harness/{harness}"
     )
 
 
