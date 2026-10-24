@@ -1,0 +1,16 @@
+This plugin's integration code (nuade_plugin.c, nuade_viz_adapter.c, nuade_instance.h and CMakeLists.txt) is
+licensed under the MIT License. See the top-level LICENSE file.
+
+Third-party dependencies:
+=========================
+
+nuade (downloaded at build time, not vendored)
+License: MIT
+Source: https://github.com/emoon/nuade
+Author: Daniel Collin
+
+nuade's players are translations of Amiga replay routines taken from UADE. Most of those routines carry no stated
+license. The players ported from NostalgicPlayer (https://github.com/neumatho/NostalgicPlayer, Thomas Neumann) keep its
+MIT license, and some players include data copied from an eagleplayer. nuade's THIRD_PARTY_NOTICES.md lists which
+players fall under which, and is the authority for redistributing a build of this plugin:
+https://github.com/emoon/nuade/blob/main/THIRD_PARTY_NOTICES.md

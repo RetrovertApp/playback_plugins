@@ -1,0 +1,9 @@
+[plugin]
+name = "nuade"
+
+[data]
+entries = []
+
+[[fixtures]]
+file = "fixtures/retrovert_selftest.ptm"
+sha256 = "d4124847085ff271fc8a0a70f4e713f7e0cf991ea582e2c2a2e892da329b93bf"
