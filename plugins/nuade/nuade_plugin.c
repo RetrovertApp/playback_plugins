@@ -30,6 +30,8 @@
 
 // Metadata scans a song to find its length; stop at this much so an endless song cannot hold the scan.
 #define MAX_SCAN_FRAMES ((uint64_t)FREQ * 30 * 60)
+// The same bound for a scan, which counts ticks: 30 minutes at the 50 Hz of the usual Amiga player.
+#define MAX_SCAN_TICKS (50 * 60 * 30)
 
 #define EXTENSIONS_CAP 4096
 
@@ -250,9 +252,18 @@ static void set_tag_if_present(RVMetadataId index, const char* tag, const char* 
 }
 
 // Length of one pass of a subsong in seconds, 0 when it did not loop or end within MAX_SCAN_FRAMES.
+//
+// A tick player is scanned without mixing, which costs a fraction of the dry run that renders the audio; a
+// self-rendering player has no scan and gets the dry run.
 static double subsong_seconds(NuadeSong* song, uint32_t subsong) {
-    NuadeDuration duration;
+    NuadeScan* scan = nuade_scan(song, subsong, FREQ, MAX_SCAN_TICKS);
+    if (scan != nullptr) {
+        const double seconds = scan->truncated ? 0.0 : (double)scan->frames / FREQ;
+        nuade_scan_free(scan);
+        return seconds;
+    }
 
+    NuadeDuration duration;
     if (!nuade_duration(song, subsong, FREQ, MAX_SCAN_FRAMES, &duration) || duration.capped) {
         return 0.0;
     }
