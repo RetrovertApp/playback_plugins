@@ -19,6 +19,10 @@
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// The host rejects a captured window wider than its row budget (64 rows by default) instead of truncating it, and a
+// grid_ticks player can report a thousand rows, so the window follows the playhead.
+#define NUPLUG_ROW_WINDOW 64
+
 static bool viz_ready(const NuplugInstance* inst) {
     return inst != nullptr && inst->song != nullptr;
 }
@@ -154,8 +158,19 @@ bool nuplug_viz_position(void* user_data, RVTrackerPosition* out) {
     out->order = at.order;
     out->pattern = at.pattern;
     out->row = at.row;
-    out->window_lo = 0;
-    out->window_hi = res.valid ? res.info.rows : 0;
+
+    uint32_t rows = res.valid ? res.info.rows : 0;
+    uint32_t lo = 0;
+    uint32_t hi = rows;
+    if (rows > NUPLUG_ROW_WINDOW) {
+        lo = at.row > NUPLUG_ROW_WINDOW / 2 ? at.row - NUPLUG_ROW_WINDOW / 2 : 0;
+        if (lo + NUPLUG_ROW_WINDOW > rows) {
+            lo = rows - NUPLUG_ROW_WINDOW;
+        }
+        hi = lo + NUPLUG_ROW_WINDOW;
+    }
+    out->window_lo = lo;
+    out->window_hi = hi;
     return true;
 }
 
