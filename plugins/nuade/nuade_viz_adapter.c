@@ -71,6 +71,13 @@ static bool load_tracker(NuplugInstance* inst) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// The voices nuade meters. A player that mixes its tracks in software (EMS v6) shows more display voices than the
+// mixer has, but scope and VU only exist for the mixer's voices; the host needs one level per scope channel.
+static uint32_t meter_count(NuplugInstance* inst) {
+    const NuadeSongInfo* info = nuade_info(inst->song);
+    return info->display_voices < info->voice_count ? info->display_voices : info->voice_count;
+}
+
 bool nuplug_viz_info(void* user_data, RVVizInfo* out) {
     NuplugInstance* inst = (NuplugInstance*)user_data;
     if (!viz_ready(inst) || out == nullptr) {
@@ -79,7 +86,7 @@ bool nuplug_viz_info(void* user_data, RVVizInfo* out) {
 
     out->caps = RVVizCaps_Scope | RVVizCaps_Vu;
     out->scroll_mode = RVScrollMode_Synchronized;
-    out->scope_channel_count = nuade_info(inst->song)->display_voices;
+    out->scope_channel_count = meter_count(inst);
     out->pattern_channel_count = 0;
     out->column_count = 0;
 
@@ -146,7 +153,7 @@ uint32_t nuplug_viz_scope_channels(void* user_data, RVChannelDesc* out, uint32_t
     if (!viz_ready(inst)) {
         return 0;
     }
-    return fill_channels(nuade_info(inst->song)->display_voices, out, cap);
+    return fill_channels(meter_count(inst), out, cap);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
