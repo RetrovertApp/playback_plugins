@@ -93,8 +93,13 @@ bool nuplug_viz_info(void* user_data, RVVizInfo* out) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// The characters every cell of the column takes. A note is "C-5", or "C--1" for a format whose lowest notes sit below
+// C-0, so its column is as wide as the widest spelling the format can produce.
 static uint8_t column_text_width(const NuadeColumnDesc* col) {
-    return col->kind == NuadeColumn_Note ? 3 : col->digits;
+    if (col->kind != NuadeColumn_Note) {
+        return col->digits;
+    }
+    return col->octave_shift < 0 ? 4 : 3;
 }
 
 uint32_t nuplug_viz_columns(void* user_data, RVColumnDesc* out, uint32_t cap) {
@@ -196,21 +201,24 @@ static bool reserve_cells(NuplugInstance* inst, uint32_t count) {
     return true;
 }
 
-// The host shows a cell as the text it is given; `raw` only drives its coloring, with 0 for an empty cell.
+// The host shows a cell as the text it is given and sizes its columns from that text, so every cell takes the width the
+// column declares and an empty one is dots. `raw` only drives its coloring, with 0 for an empty cell.
 static void render_cell(const NuadeColumnDesc* col, int32_t value, RVPatternCell* cell) {
     memset(cell->text, 0, sizeof(cell->text));
     cell->raw = value >= 0 ? (uint32_t)value + 1 : 0;
 
+    char* txt = (char*)cell->text;
+    const uint8_t width = column_text_width(col);
     if (value == NUADE_CELL_EMPTY) {
+        memset(txt, '.', width < sizeof(cell->text) ? width : sizeof(cell->text) - 1);
         return;
     }
 
-    char* txt = (char*)cell->text;
     switch (col->kind) {
         case NuadeColumn_Note: {
             char name[8];
             nuade_note_name(name, value, col->octave_shift);
-            snprintf(txt, sizeof(cell->text), "%s", name);
+            snprintf(txt, sizeof(cell->text), "%-*s", width, name);
             break;
         }
         case NuadeColumn_Dec:
